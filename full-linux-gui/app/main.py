@@ -15,6 +15,11 @@ from exports.export_qr import QRExportManager
 from exports.export_usb import save_report_to_usb
 from exports.export_sd_boot import save_report_to_sdboot
 from diagnostics.report_builder import build_sample_report
+# Try to reuse the splash module's logo discovery so the app icon matches the splash
+try:
+    from gui.splash import LOGO_PATH
+except Exception:
+    LOGO_PATH = None
 
 APP_DIR = Path(__file__).resolve().parents[1]
 REPORT_DIR = APP_DIR / "reports"
@@ -32,10 +37,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(central)
         layout = QtWidgets.QVBoxLayout(central)
 
+        # Header with optional logo at left and title centered
+        header = QtWidgets.QHBoxLayout()
+        header.setAlignment(QtCore.Qt.AlignLeft)
+        if LOGO_PATH and LOGO_PATH.exists():
+            logo_pix = QtGui.QPixmap(str(LOGO_PATH)).scaled(36, 36, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+            logo_lbl = QtWidgets.QLabel()
+            logo_lbl.setPixmap(logo_pix)
+            logo_lbl.setFixedSize(40, 40)
+            header.addWidget(logo_lbl)
         title = QtWidgets.QLabel("Apple Pi Diagnostics")
         title.setAlignment(QtCore.Qt.AlignCenter)
         title.setStyleSheet("font-size:24px; font-weight:600;")
-        layout.addWidget(title)
+        header.addWidget(title)
+        layout.addLayout(header)
 
         # Buttons row
         btn_row = QtWidgets.QHBoxLayout()
@@ -192,6 +207,9 @@ class QRDisplayDialog(QtWidgets.QDialog):
 
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
+    # Set the application icon (taskbar/titlebar) to the apple logo if available
+    if LOGO_PATH and LOGO_PATH.exists():
+        app.setWindowIcon(QtGui.QIcon(str(LOGO_PATH)))
     # Show splash screen (Option B) before main window
     try:
         from gui.splash import SplashScreen

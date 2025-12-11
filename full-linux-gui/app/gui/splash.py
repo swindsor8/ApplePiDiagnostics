@@ -4,8 +4,26 @@
 from pathlib import Path
 from PyQt5 import QtWidgets, QtGui, QtCore
 
-ASSET_DIR = Path(__file__).resolve().parents[2] / "assets"
-LOGO_PATH = ASSET_DIR / "apple_pi_logo.png"
+
+def _find_logo_filename(name_without_ext="apple_pi_logo"):
+    """Search parent folders for an `assets/` dir that contains the logo.
+
+    Looks for common extensions (.png, .ppm, .jpg, .jpeg) starting from
+    this file's parent and walking up. Returns a Path or None.
+    """
+    exts = ("png", "ppm", "jpg", "jpeg")
+    here = Path(__file__).resolve()
+    for p in here.parents:
+        assets_dir = p / "assets"
+        if assets_dir.is_dir():
+            for ext in exts:
+                candidate = assets_dir / f"{name_without_ext}.{ext}"
+                if candidate.exists():
+                    return candidate
+    return None
+
+
+LOGO_PATH = _find_logo_filename()
 
 class SplashScreen(QtWidgets.QDialog):
     def __init__(self, parent=None, duration_ms=2500):
@@ -27,7 +45,7 @@ class SplashScreen(QtWidgets.QDialog):
         # Logo
         logo_label = QtWidgets.QLabel()
         logo_label.setAlignment(QtCore.Qt.AlignCenter)
-        if LOGO_PATH.exists():
+        if LOGO_PATH and LOGO_PATH.exists():
             pix = QtGui.QPixmap(str(LOGO_PATH))
             # scale preserving aspect ratio
             pix = pix.scaledToWidth(320, QtCore.Qt.SmoothTransformation)
@@ -46,14 +64,14 @@ class SplashScreen(QtWidgets.QDialog):
             font-family: system-ui, 'Noto Sans', 'Inter', Arial, sans-serif;
             font-size: 28px;
             font-weight: 600;
-            color: #0b1320;
+            color: #ffffff;
         """)
         layout.addWidget(title, alignment=QtCore.Qt.AlignCenter)
 
         # minor footer line (version/place)
         footer = QtWidgets.QLabel("Initializing…")
         footer.setAlignment(QtCore.Qt.AlignCenter)
-        footer.setStyleSheet("font-size:12px; color:#6b6f76;")
+        footer.setStyleSheet("font-size:12px; color:#ffffff;")
         layout.addWidget(footer, alignment=QtCore.Qt.AlignCenter)
 
         # center dialog on screen
