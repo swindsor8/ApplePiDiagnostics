@@ -26,7 +26,7 @@ def _make_pattern(size: int) -> bytearray:
     return b
 
 
-def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
+def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None, stop_event: Optional[object] = None) -> Dict[str, Any]:
     """Run RAM write/read verification.
 
     Args:
@@ -56,7 +56,7 @@ def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progr
     try:
         for p in range(max(1, int(passes))):
             bytes_written = 0
-            while bytes_written < target_bytes:
+            while bytes_written < target_bytes and (stop_event is None or not getattr(stop_event, 'is_set', lambda: False)()):
                 to_alloc = min(chunk, target_bytes - bytes_written)
                 t0 = time.time()
                 try:
@@ -98,6 +98,10 @@ def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progr
                 del buf
                 del pat
 
+            # allow early cancellation between passes
+            if stop_event is not None and getattr(stop_event, 'is_set', lambda: False)():
+                break
+
             # end while for this pass
     except Exception as e:
         errors.append(str(e))
@@ -116,9 +120,9 @@ def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progr
     }
 
 
-def run_ram_quick_test(total_mb: int = 64, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
+def run_ram_quick_test(total_mb: int = 64, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None, stop_event: Optional[object] = None) -> Dict[str, Any]:
     """Quick RAM test wrapper with smaller defaults."""
-    return run_ram_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=progress_callback)
+    return run_ram_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=progress_callback, stop_event=stop_event)
 
 
 def run_ram_stress_ng(total_mb: int = 512, workers: int = 1, duration: int = 60) -> Dict[str, Any]:
@@ -149,7 +153,7 @@ def run_ram_stress_ng(total_mb: int = 512, workers: int = 1, duration: int = 60)
             return {"status": "ERROR", "error": str(e)}
 
     # fallback to internal RAM test
-    res = run_ram_test(total_mb=min(int(total_mb), 256), chunk_mb=int(chunk_mb) if (chunk_mb := 16) else 16, passes=1)
+    res = run_ram_test(total_mb=min(int(total_mb), 256), chunk_mb=16, passes=1)
     res.update({"note": "stress-ng not installed; used internal RAM test fallback"})
     return res
 

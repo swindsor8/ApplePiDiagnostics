@@ -244,6 +244,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
 class IndividualTestsDialog(QtWidgets.QDialog):
     sig_log = QtCore.pyqtSignal(str)
+    sig_progress_cpu = QtCore.pyqtSignal(int)
+    sig_progress_ram = QtCore.pyqtSignal(int)
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Individual Tests")
@@ -284,6 +286,20 @@ class IndividualTestsDialog(QtWidgets.QDialog):
             self.cpu_stress_btn.clicked.connect(self._on_cpu_stress_clicked)
         except Exception:
             pass
+        # CPU progress + cancel
+        self.cpu_progress = QtWidgets.QProgressBar()
+        self.cpu_progress.setRange(0, 100)
+        self.cpu_progress.setValue(0)
+        self.cpu_cancel_btn = QtWidgets.QPushButton("Cancel CPU")
+        cpu_pb_row = QtWidgets.QHBoxLayout()
+        cpu_pb_row.addWidget(self.cpu_progress)
+        cpu_pb_row.addWidget(self.cpu_cancel_btn)
+        layout.addLayout(cpu_pb_row)
+        try:
+            self.sig_progress_cpu.connect(self.cpu_progress.setValue)
+            self.cpu_cancel_btn.clicked.connect(self._on_cpu_cancel_clicked)
+        except Exception:
+            pass
         layout.addWidget(self.check_ram)
         # RAM options already added; add quick + stress buttons
         ram_btns = QtWidgets.QHBoxLayout()
@@ -295,6 +311,20 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         try:
             self.ram_quick_btn.clicked.connect(self._on_ram_quick_clicked)
             self.ram_stress_btn.clicked.connect(self._on_ram_stress_clicked)
+        except Exception:
+            pass
+        # RAM progress + cancel
+        self.ram_progress = QtWidgets.QProgressBar()
+        self.ram_progress.setRange(0, 100)
+        self.ram_progress.setValue(0)
+        self.ram_cancel_btn = QtWidgets.QPushButton("Cancel RAM")
+        ram_pb_row = QtWidgets.QHBoxLayout()
+        ram_pb_row.addWidget(self.ram_progress)
+        ram_pb_row.addWidget(self.ram_cancel_btn)
+        layout.addLayout(ram_pb_row)
+        try:
+            self.sig_progress_ram.connect(self.ram_progress.setValue)
+            self.ram_cancel_btn.clicked.connect(self._on_ram_cancel_clicked)
         except Exception:
             pass
         # RAM test options (total MB, chunk MB, passes)
@@ -331,6 +361,11 @@ class IndividualTestsDialog(QtWidgets.QDialog):
             self.sig_log.connect(self.log.append)
         except Exception:
             pass
+        # running handles for cancellation
+        self._cpu_stop_event = None
+        self._cpu_stress_proc = None
+        self._ram_stop_event = None
+        self._ram_stress_proc = None
 
     # CPU button handlers
     def _on_cpu_quick_clicked(self):
@@ -344,18 +379,40 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         workers = int(self.cpu_workers_spin.value())
 
         def _run():
+            import multiprocessing as _mp
+            import time as _time
+
+            stop_ev = _mp.Event()
+            self._cpu_stop_event = stop_ev
+
+            start_ts = _time.time()
+
             def _cb(sample):
                 try:
                     avg = sample.get('avg', 0.0)
+                    # estimate percent from elapsed vs duration
+                    elapsed = max(0.0, sample.get('ts', _time.time()) - start_ts)
+                    pct = min(100, int((elapsed / max(1, duration)) * 100))
+                    try:
+                        self.sig_progress_cpu.emit(pct)
+                    except Exception:
+                        pass
                     self.sig_log.emit(f"CPU: avg={avg:.1f}%")
                 except Exception:
                     pass
 
             try:
-                res = cpu_test.run_cpu_quick_test(duration=duration, workers=(None if workers == 0 else workers), progress_callback=_cb)
+                res = cpu_test.run_cpu_quick_test(duration=duration, workers=(None if workers == 0 else workers), progress_callback=_cb, stop_event=stop_ev)
                 self.sig_log.emit(f"CPU quick finished: avg={res.get('avg_cpu_percent',0):.1f}%")
             except Exception as e:
                 self.sig_log.emit(f"CPU quick failed: {e}")
+            finally:
+                # ensure progress shows complete and clear stop handle
+                try:
+                    self.sig_progress_cpu.emit(100)
+                except Exception:
+                    pass
+                self._cpu_stop_event = None
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -370,14 +427,55 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         workers = int(self.cpu_workers_spin.value())
 
         def _run():
-            try:
-                res = cpu_test.run_cpu_stress_ng(duration=duration, workers=(None if workers == 0 else workers))
-                if isinstance(res, dict) and res.get('status'):
-                    self.sig_log.emit(f"CPU stress finished: status={res.get('status')}")
+            import shutil as _shutil
+            import subprocess as _subp
+            import time as _time
+
+            # prefer using stress-ng directly via Popen so we can cancel it
+            if _shutil.which("stress-ng"):
+                cmd = ["stress-ng", "--cpu", str(workers if workers and workers > 0 else (_time.time() and workers or '' )).replace('','1'), "--timeout", f"{int(duration)}s"]
+                # simpler: compute workers properly
+                cpu_count = None
+                try:
+                    import psutil as _ps
+                    cpu_count = _ps.cpu_count(logical=True) or 1
+                except Exception:
+                    cpu_count = 1
+                if workers is None or workers == 0:
+                    use_workers = cpu_count
                 else:
-                    self.sig_log.emit(f"CPU stress result: {res}")
-            except Exception as e:
-                self.sig_log.emit(f"CPU stress failed: {e}")
+                    use_workers = workers
+                cmd = ["stress-ng", "--cpu", str(use_workers), "--timeout", f"{int(duration)}s", "--metrics-brief"]
+
+                try:
+                    proc = _subp.Popen(cmd, stdout=_subp.PIPE, stderr=_subp.PIPE, text=True)
+                    self._cpu_stress_proc = proc
+                    out, err = proc.communicate()
+                    self._cpu_stress_proc = None
+                    status = "OK" if proc.returncode == 0 else "FAIL"
+                    self.sig_log.emit(f"CPU stress finished: status={status}")
+                except Exception as e:
+                    self.sig_log.emit(f"CPU stress failed: {e}")
+            else:
+                # fallback to internal test (with cancel support)
+                import multiprocessing as _mp
+                stop_ev = _mp.Event()
+                self._cpu_stop_event = stop_ev
+
+                def _cb(sample):
+                    try:
+                        avg = sample.get('avg', 0.0)
+                        self.sig_log.emit(f"CPU(stress-fallback): avg={avg:.1f}%")
+                    except Exception:
+                        pass
+
+                try:
+                    res = cpu_test.run_cpu_test(duration=duration, workers=(None if workers == 0 else workers), progress_callback=_cb, stop_event=stop_ev)
+                    self.sig_log.emit(f"CPU stress-fallback finished: avg={res.get('avg_cpu_percent',0):.1f}%")
+                except Exception as e:
+                    self.sig_log.emit(f"CPU stress failed: {e}")
+                finally:
+                    self._cpu_stop_event = None
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -394,17 +492,36 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         passes = int(self.ram_passes_spin.value())
 
         def _run():
+            import multiprocessing as _mp
+            import time as _time
+
+            stop_ev = _mp.Event()
+            self._ram_stop_event = stop_ev
+            start_ts = _time.time()
+
             def _cb(sample):
                 try:
-                    self.sig_log.emit(f"RAM: pass={sample.get('pass',0)} tested={sample.get('tested_mb',0):.1f}MB")
+                    tested = sample.get('tested_mb', 0.0)
+                    pct = min(100, int((tested / max(1, total_mb)) * 100))
+                    try:
+                        self.sig_progress_ram.emit(pct)
+                    except Exception:
+                        pass
+                    self.sig_log.emit(f"RAM: pass={sample.get('pass',0)} tested={tested:.1f}MB")
                 except Exception:
                     pass
 
             try:
-                res = ram_test.run_ram_quick_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=_cb)
+                res = ram_test.run_ram_quick_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=_cb, stop_event=stop_ev)
                 self.sig_log.emit(f"RAM quick finished: status={res.get('status')} tested={res.get('tested_mb',0):.1f}MB throughput={res.get('throughput_mb_s',0):.2f}MB/s")
             except Exception as e:
                 self.sig_log.emit(f"RAM quick failed: {e}")
+            finally:
+                try:
+                    self.sig_progress_ram.emit(100)
+                except Exception:
+                    pass
+                self._ram_stop_event = None
 
         threading.Thread(target=_run, daemon=True).start()
 
@@ -417,20 +534,86 @@ class IndividualTestsDialog(QtWidgets.QDialog):
 
         # use ram_quick UI fields to choose parameters for stress-ng wrapper
         total_mb = int(self.ram_total_spin.value())
+        chunk_mb = int(self.ram_chunk_spin.value())
+        passes = int(self.ram_passes_spin.value())
         workers = 1
         duration = int(self.cpu_duration_spin.value())
 
         def _run():
-            try:
-                res = ram_test.run_ram_stress_ng(total_mb=total_mb, workers=workers, duration=duration)
-                if isinstance(res, dict) and res.get('status'):
-                    self.sig_log.emit(f"RAM stress finished: status={res.get('status')}")
-                else:
-                    self.sig_log.emit(f"RAM stress result: {res}")
-            except Exception as e:
-                self.sig_log.emit(f"RAM stress failed: {e}")
+            import shutil as _shutil
+            import subprocess as _subp
+
+            if _shutil.which("stress-ng"):
+                cmd = ["stress-ng", "--vm", "1", "--vm-bytes", f"{int(total_mb)}M", "--timeout", f"{int(duration)}s", "--metrics-brief"]
+                try:
+                    proc = _subp.Popen(cmd, stdout=_subp.PIPE, stderr=_subp.PIPE, text=True)
+                    self._ram_stress_proc = proc
+                    out, err = proc.communicate()
+                    self._ram_stress_proc = None
+                    status = "OK" if proc.returncode == 0 else "FAIL"
+                    self.sig_log.emit(f"RAM stress finished: status={status}")
+                except Exception as e:
+                    self.sig_log.emit(f"RAM stress failed: {e}")
+            else:
+                # fallback to internal ram test (supports stop_event)
+                import multiprocessing as _mp
+                stop_ev = _mp.Event()
+                self._ram_stop_event = stop_ev
+
+                def _cb(sample):
+                    try:
+                        tested = sample.get('tested_mb', 0.0)
+                        pct = min(100, int((tested / max(1, total_mb)) * 100))
+                        try:
+                            self.sig_progress_ram.emit(pct)
+                        except Exception:
+                            pass
+                        self.sig_log.emit(f"RAM: pass={sample.get('pass',0)} tested={tested:.1f}MB")
+                    except Exception:
+                        pass
+
+                try:
+                    res = ram_test.run_ram_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=_cb, stop_event=stop_ev)
+                    self.sig_log.emit(f"RAM stress-fallback finished: status={res.get('status')} tested={res.get('tested_mb',0):.1f}MB")
+                except Exception as e:
+                    self.sig_log.emit(f"RAM stress failed: {e}")
+                finally:
+                    self._ram_stop_event = None
 
         threading.Thread(target=_run, daemon=True).start()
+
+    def _on_cpu_cancel_clicked(self):
+        # signal CPU quick/stress to stop
+        try:
+            if self._cpu_stop_event is not None:
+                try:
+                    self._cpu_stop_event.set()
+                except Exception:
+                    pass
+            if getattr(self, '_cpu_stress_proc', None):
+                try:
+                    proc = self._cpu_stress_proc
+                    proc.kill()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _on_ram_cancel_clicked(self):
+        try:
+            if self._ram_stop_event is not None:
+                try:
+                    self._ram_stop_event.set()
+                except Exception:
+                    pass
+            if getattr(self, '_ram_stress_proc', None):
+                try:
+                    proc = self._ram_stress_proc
+                    proc.kill()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def run_selected(self):
         self.log.append("Running selected tests...")
