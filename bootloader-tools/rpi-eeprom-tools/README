@@ -1,0 +1,17 @@
+Apple Pi Diagnostics - rpi-eeprom-tools
+--------------------------------------
+
+This directory should contain the official Raspberry Pi EEPROM recovery files required
+to perform bootloader recovery via the recovery partition approach.
+
+Required files (place them here manually after download):
+  - pieeprom.bin
+  - recovery.bin
+  - bootconf.txt
+  - recovery.conf
+
+Do NOT place files you don't trust here. Only use official files from the Raspberry Pi Foundation.
+
+Official docs / downloads:
+  https://www.raspberrypi.com/documentation/computers/raspberry-pi-4-uefi/
+  (Search "EEPROM recovery" or "rpi-eeprom")
