@@ -26,11 +26,20 @@ REPORT_DIR = APP_DIR / "reports"
 REPORT_DIR.mkdir(exist_ok=True)
 
 class MainWindow(QtWidgets.QMainWindow):
+    sig_append = QtCore.pyqtSignal(str)
+    sig_set_button_enabled = QtCore.pyqtSignal(bool)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Apple Pi Diagnostics")
         self.setMinimumSize(900, 600)
         self._build_ui()
+        # connect thread-safe signals
+        try:
+            self.sig_append.connect(self.append_result)
+            self.sig_set_button_enabled.connect(self.full_btn.setEnabled)
+        except Exception:
+            pass
 
     def _build_ui(self):
         central = QtWidgets.QWidget()
@@ -98,21 +107,102 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def run_full_system_check(self):
         self.append_result("Starting Full System Diagnostic...")
+        # disable the button while running
+        try:
+            self.full_btn.setEnabled(False)
+        except Exception:
+            pass
         thread = threading.Thread(target=self._full_system_worker, daemon=True)
         thread.start()
 
     def _full_system_worker(self):
-        # For now, create a sample report and print status messages
+        # Run CPU test with live progress updates
+        try:
+            from diagnostics.cpu import cpu_test
+        except Exception:
+            cpu_test = None
+
         self.append_result("Running CPU test...")
-        QtCore.QMetaObject.invokeMethod(self, "append_result", QtCore.Qt.QueuedConnection,
-                                        QtCore.Q_ARG(str, "CPU test complete: OK"))
-        self.append_result("Running RAM test...")
-        QtCore.QMetaObject.invokeMethod(self, "append_result", QtCore.Qt.QueuedConnection,
-                                        QtCore.Q_ARG(str, "RAM test complete: OK"))
-        # Build a sample report (placeholder)
+
+        def _progress_cb(sample):
+            # format a short progress message and emit via signal
+            avg = sample.get("avg")
+            msg = f"CPU sample: avg={avg:.1f}%"
+            try:
+                self.sig_append.emit(msg)
+            except Exception:
+                try:
+                    self.append_result(msg)
+                except Exception:
+                    pass
+
+        cpu_result = None
+        if cpu_test:
+            try:
+                cpu_result = cpu_test.run_cpu_test(duration=15, progress_callback=_progress_cb)
+                try:
+                    self.sig_append.emit(f"CPU test complete. avg={cpu_result.get('avg_cpu_percent'):.1f}%")
+                except Exception:
+                    try:
+                        self.append_result(f"CPU test complete. avg={cpu_result.get('avg_cpu_percent'):.1f}%")
+                    except Exception:
+                        pass
+            except Exception as e:
+                try:
+                    self.sig_append.emit(f"CPU test failed: {e}")
+                except Exception:
+                    try:
+                        self.append_result(f"CPU test failed: {e}")
+                    except Exception:
+                        pass
+        else:
+            try:
+                self.sig_append.emit("CPU test not available")
+            except Exception:
+                try:
+                    self.append_result("CPU test not available")
+                except Exception:
+                    pass
+
+        # TODO: run RAM, SD and other diagnostics similarly (placeholders for now)
+        # Run RAM test with progress
+        try:
+            from diagnostics.ram import ram_test
+        except Exception:
+            ram_test = None
+
+        if ram_test:
+            self.sig_append.emit("Running RAM test...")
+
+            def _ram_progress(sample):
+                try:
+                    msg = f"RAM: tested={sample.get('tested_mb',0):.1f}MB chunk={sample.get('chunk_mb',0):.1f}MB"
+                    self.sig_append.emit(msg)
+                except Exception:
+                    pass
+
+            try:
+                ram_res = ram_test.run_ram_test(total_mb=128, chunk_mb=16, passes=1, progress_callback=_ram_progress)
+                self.sig_append.emit(f"RAM test complete: status={ram_res.get('status')} tested={ram_res.get('tested_mb'):.1f}MB throughput={ram_res.get('throughput_mb_s'):.1f}MB/s")
+            except Exception as e:
+                self.sig_append.emit(f"RAM test failed: {e}")
+        else:
+            try:
+                self.sig_append.emit("RAM test not available")
+            except Exception:
+                pass
+
+        # Build report and re-enable button
         report_path = build_sample_report(REPORT_DIR)
-        QtCore.QMetaObject.invokeMethod(self, "append_result", QtCore.Qt.QueuedConnection,
-                                        QtCore.Q_ARG(str, f"Full diagnostic complete. Report: {report_path}"))
+        try:
+            self.sig_append.emit(f"Full diagnostic complete. Report: {report_path}")
+            self.sig_set_button_enabled.emit(True)
+        except Exception:
+            try:
+                self.append_result(f"Full diagnostic complete. Report: {report_path}")
+                self.full_btn.setEnabled(True)
+            except Exception:
+                pass
 
     def open_individual_tests(self):
         dlg = IndividualTestsDialog(self)
@@ -153,6 +243,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.append_result("Failed to start QR export server.")
 
 class IndividualTestsDialog(QtWidgets.QDialog):
+    sig_log = QtCore.pyqtSignal(str)
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Individual Tests")
@@ -167,6 +258,26 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         self.check_cpu.setChecked(True)
         layout.addWidget(self.check_cpu)
         layout.addWidget(self.check_ram)
+        # RAM test options (total MB, chunk MB, passes)
+        ram_opts = QtWidgets.QHBoxLayout()
+        ram_opts.addWidget(QtWidgets.QLabel("Total MB:"))
+        self.ram_total_spin = QtWidgets.QSpinBox()
+        self.ram_total_spin.setRange(16, 8192)
+        self.ram_total_spin.setValue(128)
+        ram_opts.addWidget(self.ram_total_spin)
+
+        ram_opts.addWidget(QtWidgets.QLabel("Chunk MB:"))
+        self.ram_chunk_spin = QtWidgets.QSpinBox()
+        self.ram_chunk_spin.setRange(1, 2048)
+        self.ram_chunk_spin.setValue(16)
+        ram_opts.addWidget(self.ram_chunk_spin)
+
+        ram_opts.addWidget(QtWidgets.QLabel("Passes:"))
+        self.ram_passes_spin = QtWidgets.QSpinBox()
+        self.ram_passes_spin.setRange(1, 10)
+        self.ram_passes_spin.setValue(1)
+        ram_opts.addWidget(self.ram_passes_spin)
+        layout.addLayout(ram_opts)
         layout.addWidget(self.check_sd)
 
         run_btn = QtWidgets.QPushButton("Run Selected")
@@ -176,13 +287,50 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         self.log = QtWidgets.QTextEdit()
         self.log.setReadOnly(True)
         layout.addWidget(self.log)
+        # wire signal to append to the log safely from worker threads
+        try:
+            self.sig_log.connect(self.log.append)
+        except Exception:
+            pass
 
     def run_selected(self):
         self.log.append("Running selected tests...")
+        # CPU placeholder
         if self.check_cpu.isChecked():
             self.log.append("CPU test placeholder: OK")
+
+        # RAM: run in a background thread and emit progress via sig_log
         if self.check_ram.isChecked():
-            self.log.append("RAM test placeholder: OK")
+            try:
+                from diagnostics.ram import ram_test
+            except Exception:
+                ram_test = None
+
+            if not ram_test:
+                self.log.append("RAM test module not available")
+            else:
+                total_mb = int(self.ram_total_spin.value())
+                chunk_mb = int(self.ram_chunk_spin.value())
+                passes = int(self.ram_passes_spin.value())
+
+                def _run_ram():
+                    def _cb(sample):
+                        try:
+                            msg = f"RAM: pass={sample.get('pass',0)} tested={sample.get('tested_mb',0):.1f}MB chunk={sample.get('chunk_mb',0):.1f}MB"
+                            self.sig_log.emit(msg)
+                        except Exception:
+                            pass
+
+                    try:
+                        res = ram_test.run_ram_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=_cb)
+                        self.sig_log.emit(f"RAM test finished: status={res.get('status')} tested={res.get('tested_mb',0):.1f}MB throughput={res.get('throughput_mb_s',0):.2f}MB/s")
+                    except Exception as e:
+                        self.sig_log.emit(f"RAM test failed: {e}")
+
+                thr = threading.Thread(target=_run_ram, daemon=True)
+                thr.start()
+
+        # SD placeholder
         if self.check_sd.isChecked():
             self.log.append("SD card test placeholder: OK")
 

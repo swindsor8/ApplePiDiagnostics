@@ -71,6 +71,27 @@ etc.
 
 Report Export Options
 
+RAM Test
+--------
+
+The project includes a programmable RAM diagnostic at `full-linux-gui/app/diagnostics/ram/ram_test.py`.
+
+- CLI usage:
+
+```bash
+python3 full-linux-gui/app/diagnostics/ram/ram_test.py --total-mb 128 --chunk-mb 16 --passes 1
+```
+
+- GUI:
+	- Open the app `full-linux-gui/app/main.py`, click `Run Individual Tests` and enable `RAM Test`.
+	- Choose `Total MB`, `Chunk MB`, and `Passes` before pressing `Run Selected`.
+	- Live progress appears in the dialog log; results report `status`, `tested_mb`, and throughput (MB/s).
+
+Notes
+-----
+- The RAM test attempts to avoid allocating more than ~75% of available memory to reduce system instability. Adjust `Total MB` accordingly for thorough testing.
+- The test writes a deterministic pattern to each buffer and verifies it on readback. Any mismatch is reported as `FAIL` in the result.
+
 After a diagnostic session, users can save results using any of these built-in methods:
 
 Save to USB Drive
