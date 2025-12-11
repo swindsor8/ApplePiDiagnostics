@@ -257,7 +257,46 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         self.check_sd = QtWidgets.QCheckBox("SD Card Test")
         self.check_cpu.setChecked(True)
         layout.addWidget(self.check_cpu)
+        # CPU test options (duration seconds, workers 0=auto)
+        cpu_opts = QtWidgets.QHBoxLayout()
+        cpu_opts.addWidget(QtWidgets.QLabel("Duration (s):"))
+        self.cpu_duration_spin = QtWidgets.QSpinBox()
+        self.cpu_duration_spin.setRange(1, 600)
+        self.cpu_duration_spin.setValue(15)
+        cpu_opts.addWidget(self.cpu_duration_spin)
+
+        cpu_opts.addWidget(QtWidgets.QLabel("Workers (0=auto):"))
+        self.cpu_workers_spin = QtWidgets.QSpinBox()
+        self.cpu_workers_spin.setRange(0, 128)
+        self.cpu_workers_spin.setValue(0)
+        cpu_opts.addWidget(self.cpu_workers_spin)
+        layout.addLayout(cpu_opts)
+        # CPU quick + stress buttons
+        cpu_btns = QtWidgets.QHBoxLayout()
+        self.cpu_quick_btn = QtWidgets.QPushButton("Run CPU Test")
+        self.cpu_stress_btn = QtWidgets.QPushButton("CPU Stress Test")
+        cpu_btns.addWidget(self.cpu_quick_btn)
+        cpu_btns.addWidget(self.cpu_stress_btn)
+        layout.addLayout(cpu_btns)
+        # connect button handlers
+        try:
+            self.cpu_quick_btn.clicked.connect(self._on_cpu_quick_clicked)
+            self.cpu_stress_btn.clicked.connect(self._on_cpu_stress_clicked)
+        except Exception:
+            pass
         layout.addWidget(self.check_ram)
+        # RAM options already added; add quick + stress buttons
+        ram_btns = QtWidgets.QHBoxLayout()
+        self.ram_quick_btn = QtWidgets.QPushButton("Run RAM Test")
+        self.ram_stress_btn = QtWidgets.QPushButton("RAM Stress Test")
+        ram_btns.addWidget(self.ram_quick_btn)
+        ram_btns.addWidget(self.ram_stress_btn)
+        layout.addLayout(ram_btns)
+        try:
+            self.ram_quick_btn.clicked.connect(self._on_ram_quick_clicked)
+            self.ram_stress_btn.clicked.connect(self._on_ram_stress_clicked)
+        except Exception:
+            pass
         # RAM test options (total MB, chunk MB, passes)
         ram_opts = QtWidgets.QHBoxLayout()
         ram_opts.addWidget(QtWidgets.QLabel("Total MB:"))
@@ -293,11 +332,138 @@ class IndividualTestsDialog(QtWidgets.QDialog):
         except Exception:
             pass
 
+    # CPU button handlers
+    def _on_cpu_quick_clicked(self):
+        try:
+            from diagnostics.cpu import cpu_test
+        except Exception:
+            self.sig_log.emit("CPU test module not available")
+            return
+
+        duration = int(self.cpu_duration_spin.value())
+        workers = int(self.cpu_workers_spin.value())
+
+        def _run():
+            def _cb(sample):
+                try:
+                    avg = sample.get('avg', 0.0)
+                    self.sig_log.emit(f"CPU: avg={avg:.1f}%")
+                except Exception:
+                    pass
+
+            try:
+                res = cpu_test.run_cpu_quick_test(duration=duration, workers=(None if workers == 0 else workers), progress_callback=_cb)
+                self.sig_log.emit(f"CPU quick finished: avg={res.get('avg_cpu_percent',0):.1f}%")
+            except Exception as e:
+                self.sig_log.emit(f"CPU quick failed: {e}")
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_cpu_stress_clicked(self):
+        try:
+            from diagnostics.cpu import cpu_test
+        except Exception:
+            self.sig_log.emit("CPU test module not available")
+            return
+
+        duration = int(self.cpu_duration_spin.value())
+        workers = int(self.cpu_workers_spin.value())
+
+        def _run():
+            try:
+                res = cpu_test.run_cpu_stress_ng(duration=duration, workers=(None if workers == 0 else workers))
+                if isinstance(res, dict) and res.get('status'):
+                    self.sig_log.emit(f"CPU stress finished: status={res.get('status')}")
+                else:
+                    self.sig_log.emit(f"CPU stress result: {res}")
+            except Exception as e:
+                self.sig_log.emit(f"CPU stress failed: {e}")
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # RAM button handlers
+    def _on_ram_quick_clicked(self):
+        try:
+            from diagnostics.ram import ram_test
+        except Exception:
+            self.sig_log.emit("RAM test module not available")
+            return
+
+        total_mb = int(self.ram_total_spin.value())
+        chunk_mb = int(self.ram_chunk_spin.value())
+        passes = int(self.ram_passes_spin.value())
+
+        def _run():
+            def _cb(sample):
+                try:
+                    self.sig_log.emit(f"RAM: pass={sample.get('pass',0)} tested={sample.get('tested_mb',0):.1f}MB")
+                except Exception:
+                    pass
+
+            try:
+                res = ram_test.run_ram_quick_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=_cb)
+                self.sig_log.emit(f"RAM quick finished: status={res.get('status')} tested={res.get('tested_mb',0):.1f}MB throughput={res.get('throughput_mb_s',0):.2f}MB/s")
+            except Exception as e:
+                self.sig_log.emit(f"RAM quick failed: {e}")
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def _on_ram_stress_clicked(self):
+        try:
+            from diagnostics.ram import ram_test
+        except Exception:
+            self.sig_log.emit("RAM test module not available")
+            return
+
+        # use ram_quick UI fields to choose parameters for stress-ng wrapper
+        total_mb = int(self.ram_total_spin.value())
+        workers = 1
+        duration = int(self.cpu_duration_spin.value())
+
+        def _run():
+            try:
+                res = ram_test.run_ram_stress_ng(total_mb=total_mb, workers=workers, duration=duration)
+                if isinstance(res, dict) and res.get('status'):
+                    self.sig_log.emit(f"RAM stress finished: status={res.get('status')}")
+                else:
+                    self.sig_log.emit(f"RAM stress result: {res}")
+            except Exception as e:
+                self.sig_log.emit(f"RAM stress failed: {e}")
+
+        threading.Thread(target=_run, daemon=True).start()
+
     def run_selected(self):
         self.log.append("Running selected tests...")
-        # CPU placeholder
+        # CPU: if Run Selected used, default to quick CPU test
         if self.check_cpu.isChecked():
-            self.log.append("CPU test placeholder: OK")
+            try:
+                from diagnostics.cpu import cpu_test
+            except Exception:
+                cpu_test = None
+
+            if not cpu_test:
+                self.log.append("CPU test module not available")
+            else:
+                # start quick CPU test as the default action for Run Selected
+                duration = int(self.cpu_duration_spin.value())
+                workers = int(self.cpu_workers_spin.value())
+
+                def _run_cpu_quick_selected():
+                    def _cb(sample):
+                        try:
+                            avg = sample.get('avg', 0.0)
+                            msg = f"CPU: avg={avg:.1f}%"
+                            self.sig_log.emit(msg)
+                        except Exception:
+                            pass
+
+                    try:
+                        res = cpu_test.run_cpu_quick_test(duration=duration, workers=(None if workers == 0 else workers), progress_callback=_cb)
+                        self.sig_log.emit(f"CPU quick finished: avg={res.get('avg_cpu_percent',0):.1f}%")
+                    except Exception as e:
+                        self.sig_log.emit(f"CPU quick failed: {e}")
+
+                threading.Thread(target=_run_cpu_quick_selected, daemon=True).start()
 
         # RAM: run in a background thread and emit progress via sig_log
         if self.check_ram.isChecked():

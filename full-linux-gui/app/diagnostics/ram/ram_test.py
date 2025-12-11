@@ -116,6 +116,44 @@ def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progr
     }
 
 
+def run_ram_quick_test(total_mb: int = 64, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None) -> Dict[str, Any]:
+    """Quick RAM test wrapper with smaller defaults."""
+    return run_ram_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=progress_callback)
+
+
+def run_ram_stress_ng(total_mb: int = 512, workers: int = 1, duration: int = 60) -> Dict[str, Any]:
+    """Run stress-ng VM stress test if available; fallback to run_ram_test.
+
+    Uses `stress-ng --vm <workers> --vm-bytes <total_mb>M --timeout <duration>s`.
+    Returns a dict with status and subprocess output or fallback summary.
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("stress-ng"):
+        cmd = [
+            "stress-ng",
+            "--vm",
+            str(workers),
+            "--vm-bytes",
+            f"{int(total_mb)}M",
+            "--timeout",
+            f"{int(duration)}s",
+            "--metrics-brief",
+        ]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True)
+            status = "OK" if proc.returncode == 0 else "FAIL"
+            return {"status": status, "returncode": proc.returncode, "stdout": proc.stdout, "stderr": proc.stderr}
+        except Exception as e:
+            return {"status": "ERROR", "error": str(e)}
+
+    # fallback to internal RAM test
+    res = run_ram_test(total_mb=min(int(total_mb), 256), chunk_mb=int(chunk_mb) if (chunk_mb := 16) else 16, passes=1)
+    res.update({"note": "stress-ng not installed; used internal RAM test fallback"})
+    return res
+
+
 if __name__ == "__main__":
     import argparse
     import json
