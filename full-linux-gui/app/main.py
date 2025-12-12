@@ -233,14 +233,52 @@ class MainWindow(QtWidgets.QMainWindow):
             self.append_result("No report available to view.")
 
     def show_qr(self):
-        # Start a simple HTTP server to serve report directory and show QR
-        qm = QRExportManager(str(REPORT_DIR), port=8888)
-        url = qm.start()
-        if url:
-            dialog = QRDisplayDialog(url, parent=self)
-            dialog.exec_()
-        else:
-            self.append_result("Failed to start QR export server.")
+        # Show a QR image for the most recent report (prefer pre-generated QR image)
+        try:
+            # pick latest HTML or JSON report
+            candidates = list(REPORT_DIR.glob('report_*.html')) + list(REPORT_DIR.glob('report_*.json'))
+            latest = max(candidates, key=lambda p: p.stat().st_mtime) if candidates else None
+            if not latest:
+                self.append_result("No report available to generate QR for.")
+                return
+
+            base = latest.stem  # e.g. report_1765509939
+            qr_dir = REPORT_DIR / 'qrs'
+            qr_paths = [qr_dir / f"report_html_{base}.png", qr_dir / f"report_html_path_{base}.png"]
+            img_path = None
+            for p in qr_paths:
+                if p.exists():
+                    img_path = p
+                    break
+
+            if img_path is None:
+                # try to generate a simple file:// QR pointing at the HTML/JSON
+                try:
+                    import qrcode
+                    data = f"file://{str(latest.resolve())}"
+                    tmp = Path('/tmp') / f"applepi_qr_{base}.png"
+                    img = qrcode.make(data)
+                    img.save(str(tmp))
+                    img_path = tmp
+                except Exception:
+                    # fallback: attempt to use QRExportManager to serve and produce a URL
+                    try:
+                        qm = QRExportManager(str(REPORT_DIR), port=0)
+                        url = qm.start()
+                        if url:
+                            dialog = QRDisplayDialog(url, parent=self)
+                            dialog.exec_()
+                            return
+                    except Exception:
+                        pass
+
+            if img_path:
+                dialog = QRDisplayDialog(img_path=img_path, parent=self)
+                dialog.exec_()
+            else:
+                self.append_result("Failed to generate or locate QR code for report.")
+        except Exception as e:
+            self.append_result(f"Error showing QR: {e}")
 
 class IndividualTestsDialog(QtWidgets.QDialog):
     sig_log = QtCore.pyqtSignal(str)
@@ -554,22 +592,38 @@ class IndividualTestsDialog(QtWidgets.QDialog):
             self.log.append("SD card test placeholder: OK")
 
 class QRDisplayDialog(QtWidgets.QDialog):
-    def __init__(self, url, parent=None):
+    def __init__(self, url: str | None = None, img_path: Path | str | None = None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("QR Code - Scan to View Report")
         self.setMinimumSize(420, 480)
         layout = QtWidgets.QVBoxLayout(self)
         lbl = QtWidgets.QLabel("Scan this QR code with your phone to open the report:")
         layout.addWidget(lbl)
-        pix = QtGui.QPixmap(str(Path(__file__).parent / "qr_placeholder.png"))
         self.qr_label = QtWidgets.QLabel()
         self.qr_label.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(self.qr_label, stretch=1)
-        # generate QR image via export_qr (already created)
-        from exports.export_qr import generate_qr_image
-        img_path = generate_qr_image(url, Path("/tmp/applepi_qr.png"))
-        pix = QtGui.QPixmap(str(img_path))
-        self.qr_label.setPixmap(pix.scaled(360, 360, QtCore.Qt.KeepAspectRatio))
+
+        pix = None
+        # If an image path was provided, use it
+        if img_path:
+            try:
+                pix = QtGui.QPixmap(str(img_path))
+            except Exception:
+                pix = None
+
+        # If a URL was provided instead, attempt to generate a QR image
+        if pix is None and url:
+            try:
+                from exports.export_qr import generate_qr_image
+                img_path2 = generate_qr_image(url, Path('/tmp') / 'applepi_qr.png')
+                pix = QtGui.QPixmap(str(img_path2))
+            except Exception:
+                pix = None
+
+        if pix is not None and not pix.isNull():
+            self.qr_label.setPixmap(pix.scaled(360, 360, QtCore.Qt.KeepAspectRatio))
+        else:
+            self.qr_label.setText('QR image unavailable')
 
 
 if __name__ == "__main__":

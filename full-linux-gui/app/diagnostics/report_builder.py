@@ -101,6 +101,60 @@ def _write_json_report(report: Dict[str, Any], out_path: Path) -> Path:
     return out_path
 
 
+def _generate_summary_from_details(details: Dict[str, Any]) -> Dict[str, Any]:
+    """Create a concise summary dict from per-test details.
+
+    The returned structure is {test_name: {status: str, message: str, metrics: {...}}}.
+    Status is inferred from common keys (`status`, `ok`, `error`, `errors`, `failed`).
+    Up to three representative scalar metrics are captured for quick viewing.
+    """
+    summary: Dict[str, Any] = {}
+    for test, data in (details or {}).items():
+        status = "UNKNOWN"
+        message = ""
+        metrics: Dict[str, Any] = {}
+        if isinstance(data, dict):
+            # status precedence
+            if "status" in data:
+                status = str(data.get("status"))
+            elif "ok" in data:
+                status = "PASS" if data.get("ok") else "FAIL"
+            elif any(k in data for k in ("error", "errors", "failed")):
+                status = "FAIL"
+            else:
+                status = "PASS"
+
+            # collect up to 3 scalar metrics to summarise
+            picked = 0
+            prefer_keys = ("status", "avg_cpu_percent", "max_temperature", "tested_mb", "throughput_mb_s", "read_mb_s", "write_mb_s", "ping_loss", "packet_loss")
+            for k in prefer_keys:
+                if k in data and picked < 3:
+                    v = data[k]
+                    metrics[k] = v
+                    picked += 1
+
+            if picked < 3:
+                for k, v in data.items():
+                    if picked >= 3:
+                        break
+                    if isinstance(v, (str, int, float, bool)) and k not in metrics:
+                        metrics[k] = v
+                        picked += 1
+
+            # build a short message if available
+            if "message" in data:
+                message = str(data.get("message"))
+            elif "error" in data:
+                message = str(data.get("error"))
+        else:
+            # non-dict test result
+            message = str(data)
+            status = "PASS" if data in (True, "ok", "OK") else "INFO"
+
+        summary[test] = {"status": status, "message": message, "metrics": metrics}
+    return summary
+
+
 def _write_html_report(report: Dict[str, Any], out_path: Path) -> Path:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     # mobile-friendly single-page HTML with basic CSS and JSON embed
@@ -126,9 +180,24 @@ def _write_html_report(report: Dict[str, Any], out_path: Path) -> Path:
 
     html = ["<!doctype html>", "<html><head>", f"<title>{title}</title>", f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">", f"<style>{css}</style>", "</head><body>"]
     html.append(f"<header><div>{logo_tag}</div><div><h1>{title}</h1><div class=\"meta\">Generated: {meta.get('generated')}</div></div></header>")
+    # auto-generate a concise summary from details if needed
+    if (not summary) and details:
+        summary = _generate_summary_from_details(details)
+
     html.append("<section class=\"card\"><h2>Summary</h2>")
-    for k, v in summary.items():
-        html.append(f"<div><strong>{k}:</strong> {v}</div>")
+    for test, info in summary.items():
+        if isinstance(info, dict):
+            status = info.get("status", "")
+            msg = info.get("message", "")
+            html.append(f"<div><strong>{test}:</strong> <em>{status}</em> {msg}</div>")
+            metrics = info.get("metrics", {})
+            if metrics:
+                html.append("<div style=\"margin-left:12px;\">")
+                for mk, mv in metrics.items():
+                    html.append(f"<div><small>{mk}: {mv}</small></div>")
+                html.append("</div>")
+        else:
+            html.append(f"<div><strong>{test}:</strong> {info}</div>")
     html.append("</section>")
 
     html.append("<section class=\"card\"><h2>Details</h2>")
@@ -183,12 +252,27 @@ def _write_pdf_report(report: Dict[str, Any], out_path: Path) -> Path:
     c.drawString(50, y, "Summary")
     y -= 14
     c.setFont("Helvetica", 10)
-    for k, v in report.get("summary", {}).items():
-        if y < 72:
+    summary = report.get("summary", {})
+    if (not summary) and report.get("details"):
+        summary = _generate_summary_from_details(report.get("details"))
+    for test, info in summary.items():
+        if y < 120:
             c.showPage()
             y = height - 50
-        c.drawString(60, y, f"{k}: {v}")
-        y -= 12
+        if isinstance(info, dict):
+            status = info.get("status", "")
+            msg = info.get("message", "")
+            c.drawString(60, y, f"{test}: {status} {msg}")
+            y -= 12
+            for mk, mv in info.get("metrics", {}).items():
+                if y < 72:
+                    c.showPage()
+                    y = height - 50
+                c.drawString(72, y, f"- {mk}: {mv}")
+                y -= 10
+        else:
+            c.drawString(60, y, f"{test}: {info}")
+            y -= 12
 
     # details per test
     for test, data in report.get("details", {}).items():
@@ -211,6 +295,45 @@ def _write_pdf_report(report: Dict[str, Any], out_path: Path) -> Path:
     return out_path
 
 
+def _write_compact_html_report(report: Dict[str, Any]) -> str:
+    """Return a compact/minified HTML string suitable for QR embedding.
+
+    This omits the full JSON dump and uses minimal styling to keep size small.
+    """
+    title = report.get("title", "Apple Pi Diagnostics Report")
+    meta = report.get("metadata", {})
+    summary = report.get("summary", {})
+    details = report.get("details", {})
+
+    # Very small inline CSS and compact HTML structure
+    css = "body{font-family:Arial,Helvetica,sans-serif;padding:8px;font-size:12px}h1{font-size:16px;margin:0 0 6px}b{font-weight:700}small{color:#444}"
+    parts = ["<!doctype html><html><head>", f"<title>{title}</title>", f"<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">", f"<style>{css}</style>", "</head><body>"]
+    parts.append(f"<h1>{title}</h1>")
+    parts.append(f"<div><small>Generated: {meta.get('generated','')}</small></div>")
+
+    # summary: render compactly
+    parts.append("<div>")
+    for test, info in (summary or {}).items():
+        if isinstance(info, dict):
+            status = info.get("status", "")
+            parts.append(f"<div><b>{test}</b>:{status}")
+            metrics = info.get("metrics", {})
+            if metrics:
+                m = ",".join(f"{k}={v}" for k, v in metrics.items())
+                parts.append(f" <small>({m})</small>")
+            parts.append("</div>")
+        else:
+            parts.append(f"<div><b>{test}</b>: {info}</div>")
+    parts.append("</div>")
+
+    # include a tiny link to open full report when available
+    parts.append("</body></html>")
+    html = "".join(parts)
+    # collapse whitespace
+    html = " ".join(html.split())
+    return html
+
+
 def build_report(report_data: Dict[str, Any], out_dir: Path, formats: Sequence[str] = ("pdf", "html", "json")) -> Dict[str, Path]:
     """Build report in requested formats and return paths.
 
@@ -224,6 +347,10 @@ def build_report(report_data: Dict[str, Any], out_dir: Path, formats: Sequence[s
     report.setdefault("metadata", _collect_system_metadata())
     # ensure timestamps consistent
     report["metadata"].setdefault("generated", time.ctime(report["metadata"]["timestamp"]))
+
+    # Auto-generate a concise summary from details if the caller didn't provide one
+    if not report.get("summary") and report.get("details"):
+        report["summary"] = _generate_summary_from_details(report.get("details", {}))
 
     results: Dict[str, Path] = {}
     base = out_dir / f"report_{int(time.time())}"
@@ -246,22 +373,23 @@ def build_report(report_data: Dict[str, Any], out_dir: Path, formats: Sequence[s
             if "html" in results:
                 html_path = results["html"].resolve()
                 html_text = html_path.read_text(encoding="utf-8")
+                # Prefer a compact HTML embed for QR to stay under typical QR size limits
+                compact_html = _write_compact_html_report(report)
                 if QR_SUPPORTED:
-                    if len(html_text) < 1500:
-                        # embed as data URL
-                        data_url = "data:text/html;utf-8," + urllib.parse.quote(html_text)
+                    if len(compact_html) < 1500:
+                        data_url = "data:text/html;utf-8," + urllib.parse.quote(compact_html)
                         img = qrcode.make(data_url)
                         out_q = _qr_dir / f"report_html_{base.name}.png"
                         img.save(str(out_q))
                         results["qr_html"] = out_q
                     else:
+                        # compact still too large; fallback to file path QR
                         data = f"file://{str(html_path)}"
                         img = qrcode.make(data)
                         out_q = _qr_dir / f"report_html_path_{base.name}.png"
                         img.save(str(out_q))
                         results["qr_html"] = out_q
                 else:
-                    # QR not available; write small helper file indicating how to open
                     results["qr_html"] = None
 
             # JSON QR: embed JSON if small
