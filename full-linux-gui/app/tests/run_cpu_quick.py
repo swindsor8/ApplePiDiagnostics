@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-import sys, importlib, json
+import sys
+import importlib
+import json
 
 def main():
-	# prefer fork start method to avoid forkserver/spawn issues in tests
+    # prefer fork start method to avoid forkserver/spawn issues in tests
 	try:
-		import multiprocessing as _mp
-		_mp.set_start_method('fork', force=True)
+        import multiprocessing as _mp
+        _mp.set_start_method('fork', force=True)
 	except Exception:
 		pass
 
@@ -16,4 +18,4 @@ def main():
 
 
 if __name__ == '__main__':
-	main()
+    main()

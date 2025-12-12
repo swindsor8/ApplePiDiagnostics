@@ -26,6 +26,29 @@ def _cpu_worker(stop_ts: float, stop_event: Optional[Any] = None) -> None:
         x = (x + 1) * 3 % 1000003
 
 
+def _bench_worker_process(run_ts: float, out_q: mp.Queue) -> None:
+    """Top-level bench worker used by `run_cpu_benchmark` (picklable)."""
+    iters = 0
+    last_report = time.time()
+    while time.time() < run_ts:
+        x = 1
+        for i in range(100):
+            x = (x * 31337 + i) & 0xFFFFFFFF
+            iters += 1
+        now = time.time()
+        if now - last_report >= 1.0:
+            try:
+                out_q.put(iters)
+            except Exception:
+                pass
+            iters = 0
+            last_report = now
+    try:
+        out_q.put(iters)
+    except Exception:
+        pass
+
+
 def run_cpu_test(
     duration: int = 10,
     workers: Optional[int] = None,
@@ -164,6 +187,66 @@ def run_cpu_stress_ng(duration: int = 60, workers: Optional[int] = None) -> Dict
     return {
         "status": "UNSUPPORTED",
         "note": "stress-ng based CPU stress test removed; use run_cpu_quick_test or run_cpu_test instead",
+    }
+
+
+def run_cpu_benchmark(duration: int = 5, workers: Optional[int] = None) -> Dict[str, Any]:
+    """Simple CPU benchmark that measures tight-loop iterations/sec per worker.
+
+    Uses multiprocessing workers which count iterations locally and report
+    counts back to the parent via a Queue periodically.
+    """
+    import multiprocessing as _mp
+    import queue as _queue
+
+    if workers is None:
+        workers = psutil.cpu_count(logical=True) or 1
+
+    q: _mp.Queue = _mp.Queue()
+
+    procs = []
+    stop_ts = time.time() + max(1, int(duration))
+    # prefer fork context when available to avoid spawn/forkserver issues
+    try:
+        ctx = mp.get_context('fork')
+    except Exception:
+        ctx = mp
+
+    for _ in range(workers):
+        p = ctx.Process(target=_bench_worker_process, args=(stop_ts, q))
+        p.daemon = True
+        p.start()
+        procs.append(p)
+
+    total_iters = 0
+    reports = 0
+    try:
+        while time.time() < stop_ts:
+            try:
+                v = q.get(timeout=0.9)
+                total_iters += int(v)
+                reports += 1
+            except _queue.Empty:
+                # keep waiting until duration expires
+                pass
+    finally:
+        for p in procs:
+            try:
+                if p.is_alive():
+                    p.terminate()
+                    p.join(timeout=0.5)
+            except Exception:
+                pass
+
+    elapsed = max(1e-6, duration)
+    iters_per_sec = total_iters / elapsed
+    return {
+        "status": "OK",
+        "duration": duration,
+        "workers": workers,
+        "total_iterations": total_iters,
+        "iterations_per_sec": iters_per_sec,
+        "reports": reports,
     }
 
 
