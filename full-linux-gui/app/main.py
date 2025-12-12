@@ -28,6 +28,7 @@ REPORT_DIR.mkdir(exist_ok=True)
 class MainWindow(QtWidgets.QMainWindow):
     sig_append = QtCore.pyqtSignal(str)
     sig_set_button_enabled = QtCore.pyqtSignal(bool)
+    sig_progress_live = QtCore.pyqtSignal(int)
 
     def __init__(self):
         super().__init__()
@@ -44,7 +45,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _build_ui(self):
         central = QtWidgets.QWidget()
         self.setCentralWidget(central)
-        layout = QtWidgets.QVBoxLayout(central)
+        main_layout = QtWidgets.QVBoxLayout(central)
 
         # Header with optional logo at left and title centered
         header = QtWidgets.QHBoxLayout()
@@ -59,47 +60,95 @@ class MainWindow(QtWidgets.QMainWindow):
         title.setAlignment(QtCore.Qt.AlignCenter)
         title.setStyleSheet("font-size:24px; font-weight:600;")
         header.addWidget(title)
-        layout.addLayout(header)
+        main_layout.addLayout(header)
 
-        # Buttons row
-        btn_row = QtWidgets.QHBoxLayout()
-        layout.addLayout(btn_row)
+        # Navigation bar
+        nav = QtWidgets.QHBoxLayout()
+        self.home_btn = QtWidgets.QPushButton("Home")
+        self.home_btn.setToolTip("Open the dashboard with a quick summary and live progress")
+        self.home_btn.clicked.connect(self.show_dashboard)
+        nav.addWidget(self.home_btn)
 
-        self.full_btn = QtWidgets.QPushButton("Run Complete System Diagnostic")
-        self.full_btn.clicked.connect(self.run_full_system_check)
-        btn_row.addWidget(self.full_btn)
+        self.tests_btn = QtWidgets.QPushButton("Tests")
+        self.tests_btn.setToolTip("Open individual tests panel")
+        self.tests_btn.clicked.connect(self.open_individual_tests)
+        nav.addWidget(self.tests_btn)
 
-        self.individual_btn = QtWidgets.QPushButton("Run Individual Tests")
-        self.individual_btn.clicked.connect(self.open_individual_tests)
-        btn_row.addWidget(self.individual_btn)
+        self.results_btn = QtWidgets.QPushButton("Results")
+        self.results_btn.setToolTip("View detailed test results")
+        self.results_btn.clicked.connect(self.show_results)
+        nav.addWidget(self.results_btn)
 
-        # Placeholder area for results
+        self.settings_btn = QtWidgets.QPushButton("Settings")
+        self.settings_btn.setToolTip("Open application settings (theme, font, network)")
+        self.settings_btn.clicked.connect(self.open_settings)
+        nav.addWidget(self.settings_btn)
+
+        main_layout.addLayout(nav)
+
+        # Dashboard area (stacked widget used to switch views)
+        self._stack = QtWidgets.QStackedWidget()
+        main_layout.addWidget(self._stack, stretch=1)
+
+        # Dashboard widget
+        self._dashboard = QtWidgets.QWidget()
+        dash_layout = QtWidgets.QVBoxLayout(self._dashboard)
+        self.dashboard_status = QtWidgets.QLabel("No diagnostics run yet")
+        dash_layout.addWidget(self.dashboard_status)
+        self.dashboard_progress = QtWidgets.QProgressBar()
+        self.dashboard_progress.setRange(0, 100)
+        self.dashboard_progress.setValue(0)
+        dash_layout.addWidget(self.dashboard_progress)
+        self._stack.addWidget(self._dashboard)
+
+        # Results view (text)
+        results_widget = QtWidgets.QWidget()
+        results_layout = QtWidgets.QVBoxLayout(results_widget)
         self.results_box = QtWidgets.QTextEdit()
         self.results_box.setReadOnly(True)
-        layout.addWidget(self.results_box, stretch=1)
+        results_layout.addWidget(self.results_box)
+        self._stack.addWidget(results_widget)
 
-        # Export buttons
+        # Default to dashboard
+        self._stack.setCurrentWidget(self._dashboard)
+
+        # Export & action row
         export_row = QtWidgets.QHBoxLayout()
-        layout.addLayout(export_row)
+        main_layout.addLayout(export_row)
+        self.full_btn = QtWidgets.QPushButton("Run Complete System Diagnostic")
+        self.full_btn.clicked.connect(self.run_full_system_check)
+        self.full_btn.setToolTip("Run all available diagnostics and generate a report")
+        export_row.addWidget(self.full_btn)
+
         self.usb_btn = QtWidgets.QPushButton("Save to USB Drive")
         self.usb_btn.clicked.connect(self.export_usb)
+        self.usb_btn.setToolTip("Save the most recent report to any attached USB drive")
         export_row.addWidget(self.usb_btn)
 
         self.sd_btn = QtWidgets.QPushButton("Save to SD Boot Partition")
         self.sd_btn.clicked.connect(self.export_sd)
+        self.sd_btn.setToolTip("Save the most recent report to the SD boot partition")
         export_row.addWidget(self.sd_btn)
 
         self.view_btn = QtWidgets.QPushButton("View On Screen")
         self.view_btn.clicked.connect(self.view_onscreen)
+        self.view_btn.setToolTip("Open the latest report in the system browser")
         export_row.addWidget(self.view_btn)
 
         self.qr_btn = QtWidgets.QPushButton("Show QR Code")
         self.qr_btn.clicked.connect(self.show_qr)
+        self.qr_btn.setToolTip("Show a QR code for the latest report for mobile scanning")
         export_row.addWidget(self.qr_btn)
 
         # Status bar
         self.status = QtWidgets.QStatusBar()
         self.setStatusBar(self.status)
+
+        # wire live progress
+        try:
+            self.sig_progress_live.connect(self.dashboard_progress.setValue)
+        except Exception:
+            pass
 
     def append_result(self, text):
         self.results_box.append(text)
@@ -624,6 +673,102 @@ class QRDisplayDialog(QtWidgets.QDialog):
             self.qr_label.setPixmap(pix.scaled(360, 360, QtCore.Qt.KeepAspectRatio))
         else:
             self.qr_label.setText('QR image unavailable')
+
+
+class DetailedResultsDialog(QtWidgets.QDialog):
+    """Show per-test detailed JSON/metrics in a dialog."""
+    def __init__(self, test_name: str = None, data: object = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f"Detailed Results{(' - ' + test_name) if test_name else ''}")
+        self.setMinimumSize(600, 400)
+        layout = QtWidgets.QVBoxLayout(self)
+        self.text = QtWidgets.QTextEdit()
+        self.text.setReadOnly(True)
+        layout.addWidget(self.text)
+        btn_row = QtWidgets.QHBoxLayout()
+        self.copy_btn = QtWidgets.QPushButton("Copy JSON")
+        btn_row.addWidget(self.copy_btn)
+        self.close_btn = QtWidgets.QPushButton("Close")
+        btn_row.addWidget(self.close_btn)
+        layout.addLayout(btn_row)
+
+        self.close_btn.clicked.connect(self.accept)
+        self.copy_btn.clicked.connect(self._copy)
+
+        if data is not None:
+            try:
+                import json as _json
+                pretty = _json.dumps(data, indent=2)
+            except Exception:
+                pretty = str(data)
+            self.text.setPlainText(pretty)
+
+    def _copy(self):
+        try:
+            cb = QtWidgets.QApplication.clipboard()
+            cb.setText(self.text.toPlainText())
+        except Exception:
+            pass
+
+
+class SettingsDialog(QtWidgets.QDialog):
+    """Simple settings: dark mode toggle, font size, QR server port."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings")
+        self.setMinimumSize(420, 220)
+        layout = QtWidgets.QFormLayout(self)
+
+        self.dark_chk = QtWidgets.QCheckBox("Enable dark mode")
+        self.dark_chk.setToolTip("Toggle dark theme for the application")
+        layout.addRow(self.dark_chk)
+
+        self.font_spin = QtWidgets.QSpinBox()
+        self.font_spin.setRange(8, 28)
+        self.font_spin.setValue(12)
+        self.font_spin.setToolTip("Change base UI font size")
+        layout.addRow("Font size:", self.font_spin)
+
+        self.port_spin = QtWidgets.QSpinBox()
+        self.port_spin.setRange(0, 65535)
+        self.port_spin.setValue(8888)
+        self.port_spin.setToolTip("Port for the local report share server (0 for auto)")
+        layout.addRow("QR server port:", self.port_spin)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        self.save_btn = QtWidgets.QPushButton("Save")
+        self.cancel_btn = QtWidgets.QPushButton("Cancel")
+        btn_row.addWidget(self.save_btn)
+        btn_row.addWidget(self.cancel_btn)
+        layout.addRow(btn_row)
+
+        self.save_btn.clicked.connect(self._save)
+        self.cancel_btn.clicked.connect(self.reject)
+
+        # load settings
+        try:
+            settings = QtCore.QSettings('applepi', 'diagnostics')
+            self.dark_chk.setChecked(settings.value('dark', False, type=bool))
+            self.font_spin.setValue(settings.value('font_size', 12, type=int))
+            self.port_spin.setValue(settings.value('qr_port', 8888, type=int))
+        except Exception:
+            pass
+
+    def _save(self):
+        try:
+            settings = QtCore.QSettings('applepi', 'diagnostics')
+            settings.setValue('dark', bool(self.dark_chk.isChecked()))
+            settings.setValue('font_size', int(self.font_spin.value()))
+            settings.setValue('qr_port', int(self.port_spin.value()))
+            # apply dark mode immediately (simple stylesheet)
+            if self.dark_chk.isChecked():
+                qss = "QWidget{background:#222;color:#ddd} QPushButton{background:#333;color:#fff}"
+                QtWidgets.QApplication.instance().setStyleSheet(qss)
+            else:
+                QtWidgets.QApplication.instance().setStyleSheet("")
+        except Exception:
+            pass
+        self.accept()
 
 
 if __name__ == "__main__":
