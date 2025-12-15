@@ -19,7 +19,7 @@ from diagnostics.report_builder import build_report
 from diagnostics.cpu.cpu_test import run_cpu_quick_test
 from diagnostics.ram.ram_test import run_ram_quick_test
 from diagnostics.network.network_test import run_network_quick_test
-from diagnostics.sd.sd_test import run_sd_quick_test
+from diagnostics.storage.storage_test import run_storage_quick_test
 from diagnostics.usb.usb_test import run_usb_quick_test
 from diagnostics.hdmi.hdmi_test import run_hdmi_quick_test
 from diagnostics.gpio.gpio_test import run_gpio_quick_test
@@ -877,7 +877,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 elif test_id == "ram":
                     result = run_ram_quick_test(total_mb=64, chunk_mb=16, passes=1)
                 elif test_id == "sd":
-                    result = run_sd_quick_test()
+                    result = run_storage_quick_test()
                 elif test_id == "network":
                     result = run_network_quick_test()
                 elif test_id == "usb":
@@ -904,6 +904,11 @@ class MainWindow(QtWidgets.QMainWindow):
                         details = f"CPU: {result['avg_cpu_percent']:.1f}%"
                     elif "tested_mb" in result:
                         details = f"Tested: {result['tested_mb']:.0f} MB"
+                    elif "total_devices" in result:
+                        # Storage test result
+                        total = result.get("total_devices", 0)
+                        tested = result.get("tested_devices", 0)
+                        details = f"{tested}/{total} devices tested"
                     elif "count" in result:
                         details = f"Found: {result['count']} items"
                     elif "local_ip" in result:
