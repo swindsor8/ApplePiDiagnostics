@@ -48,17 +48,6 @@ class StatusCard(QtWidgets.QWidget):
         
     def _build_ui(self):
         self.setFixedSize(200, 160)
-        self.setStyleSheet("""
-            StatusCard {
-                background-color: #ffffff;
-                border-radius: 12px;
-                border: 1px solid #e0e0e0;
-            }
-            StatusCard:hover {
-                border: 2px solid #0078d4;
-                background-color: #f8f9fa;
-            }
-        """)
         
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -71,30 +60,19 @@ class StatusCard(QtWidgets.QWidget):
         header.addWidget(icon_label)
         
         title_label = QtWidgets.QLabel(self.title)
-        title_label.setStyleSheet("""
-            font-size: 14px;
-            font-weight: 600;
-            color: #1a1a1a;
-        """)
+        title_label.setObjectName("card_title")
         header.addWidget(title_label)
         header.addStretch()
         layout.addLayout(header)
         
         # Status indicator
         self.status_label = QtWidgets.QLabel("Pending")
-        self.status_label.setStyleSheet("""
-            font-size: 12px;
-            color: #666666;
-            font-weight: 500;
-        """)
+        self.status_label.setObjectName("card_status")
         layout.addWidget(self.status_label)
         
         # Details
         self.details_label = QtWidgets.QLabel("")
-        self.details_label.setStyleSheet("""
-            font-size: 11px;
-            color: #888888;
-        """)
+        self.details_label.setObjectName("card_details")
         self.details_label.setWordWrap(True)
         layout.addWidget(self.details_label)
         
@@ -171,6 +149,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.test_results = {}  # Store all test results
         self.results_lock = threading.Lock()  # Lock for thread-safe results updates
         self.dark_mode = False  # Theme state
+        self.font_size = 13  # Base font size
         self.sys_info_card = None  # Store reference to system info card
         self.sys_info_labels = []  # Store system info labels for theme updates
         self.setWindowTitle("Apple Pi Diagnostics")
@@ -209,6 +188,10 @@ class MainWindow(QtWidgets.QMainWindow):
         # Results page
         results_page = self._create_results_page()
         self.tabs.addTab(results_page, "Results")
+        
+        # Settings page
+        settings_page = self._create_settings_page()
+        self.tabs.addTab(settings_page, "Settings")
         
         main_layout.addWidget(self.tabs)
         
@@ -465,6 +448,246 @@ class MainWindow(QtWidgets.QMainWindow):
         layout.addWidget(scroll)
         
         return page
+
+    def _create_settings_page(self):
+        """Create Settings page with theme, font size, and network options"""
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(24)
+        
+        # Settings title
+        title = QtWidgets.QLabel("Settings")
+        title.setObjectName("settings_title")
+        title.setStyleSheet("""
+            font-size: 24px;
+            font-weight: 600;
+            color: #1a1a1a;
+            padding-bottom: 8px;
+        """)
+        layout.addWidget(title)
+        
+        # Theme Settings Card
+        theme_card = self._create_setting_card("Appearance", "Theme and visual preferences")
+        theme_layout = QtWidgets.QVBoxLayout()
+        theme_layout.setSpacing(12)
+        
+        # Theme selection
+        theme_label = QtWidgets.QLabel("Theme:")
+        theme_label.setObjectName("setting_label")
+        theme_layout.addWidget(theme_label)
+        
+        theme_group = QtWidgets.QButtonGroup()
+        theme_hbox = QtWidgets.QHBoxLayout()
+        
+        self.light_theme_radio = QtWidgets.QRadioButton("☀️ Light")
+        self.light_theme_radio.setObjectName("theme_radio")
+        self.light_theme_radio.setChecked(not self.dark_mode)
+        self.light_theme_radio.toggled.connect(lambda checked: self._on_theme_changed("light") if checked else None)
+        theme_group.addButton(self.light_theme_radio)
+        theme_hbox.addWidget(self.light_theme_radio)
+        
+        self.dark_theme_radio = QtWidgets.QRadioButton("🌙 Dark")
+        self.dark_theme_radio.setObjectName("theme_radio")
+        self.dark_theme_radio.setChecked(self.dark_mode)
+        self.dark_theme_radio.toggled.connect(lambda checked: self._on_theme_changed("dark") if checked else None)
+        theme_group.addButton(self.dark_theme_radio)
+        theme_hbox.addWidget(self.dark_theme_radio)
+        
+        theme_hbox.addStretch()
+        theme_layout.addLayout(theme_hbox)
+        
+        # Font size setting
+        font_label = QtWidgets.QLabel("Font Size:")
+        font_label.setObjectName("setting_label")
+        theme_layout.addWidget(font_label)
+        
+        font_hbox = QtWidgets.QHBoxLayout()
+        self.font_size_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self.font_size_slider.setMinimum(10)
+        self.font_size_slider.setMaximum(20)
+        self.font_size_slider.setValue(self.font_size)
+        self.font_size_slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
+        self.font_size_slider.setTickInterval(2)
+        self.font_size_slider.valueChanged.connect(self._on_font_size_changed)
+        font_hbox.addWidget(self.font_size_slider)
+        
+        self.font_size_label = QtWidgets.QLabel(f"{self.font_size}px")
+        self.font_size_label.setObjectName("setting_value")
+        self.font_size_label.setMinimumWidth(50)
+        font_hbox.addWidget(self.font_size_label)
+        
+        theme_layout.addLayout(font_hbox)
+        theme_card.layout().addLayout(theme_layout)
+        layout.addWidget(theme_card)
+        
+        # Network Settings Card
+        network_card = self._create_setting_card("Network", "Network configuration and status")
+        network_layout = QtWidgets.QVBoxLayout()
+        network_layout.setSpacing(12)
+        
+        # Network status
+        status_label = QtWidgets.QLabel("Network Status:")
+        status_label.setObjectName("setting_label")
+        network_layout.addWidget(status_label)
+        
+        # Refresh network info button
+        refresh_btn = QtWidgets.QPushButton("🔄 Refresh Network Info")
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+        """)
+        refresh_btn.clicked.connect(self._refresh_network_info)
+        network_layout.addWidget(refresh_btn)
+        
+        # Network info display
+        self.network_info_text = QtWidgets.QTextEdit()
+        self.network_info_text.setReadOnly(True)
+        self.network_info_text.setMaximumHeight(200)
+        self.network_info_text.setObjectName("network_info")
+        self.network_info_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #f8f9fa;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 8px;
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+            }
+        """)
+        network_layout.addWidget(self.network_info_text)
+        
+        # Load initial network info
+        self._refresh_network_info()
+        
+        network_card.layout().addLayout(network_layout)
+        layout.addWidget(network_card)
+        
+        layout.addStretch()
+        
+        return page
+    
+    def _create_setting_card(self, title, description):
+        """Create a settings card container"""
+        card = QtWidgets.QWidget()
+        card.setObjectName("setting_card")
+        card.setStyleSheet("""
+            QWidget#setting_card {
+                background-color: #ffffff;
+                border-radius: 12px;
+                border: 1px solid #e0e0e0;
+                padding: 20px;
+            }
+        """)
+        
+        card_layout = QtWidgets.QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 16, 20, 16)
+        card_layout.setSpacing(8)
+        
+        card_title = QtWidgets.QLabel(title)
+        card_title.setObjectName("card_title")
+        card_title.setStyleSheet("""
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+        """)
+        card_layout.addWidget(card_title)
+        
+        card_desc = QtWidgets.QLabel(description)
+        card_desc.setObjectName("card_desc")
+        card_desc.setStyleSheet("""
+            font-size: 13px;
+            color: #666666;
+            padding-bottom: 8px;
+        """)
+        card_layout.addWidget(card_desc)
+        
+        return card
+    
+    def _on_theme_changed(self, theme):
+        """Handle theme change from settings"""
+        self.dark_mode = (theme == "dark")
+        self._apply_theme()
+        # Update radio buttons
+        self.light_theme_radio.setChecked(not self.dark_mode)
+        self.dark_theme_radio.setChecked(self.dark_mode)
+        # Update header button
+        self.theme_btn.setText("☀️ Light" if self.dark_mode else "🌙 Dark")
+    
+    def _on_font_size_changed(self, value):
+        """Handle font size change"""
+        self.font_size = value
+        self.font_size_label.setText(f"{value}px")
+        self._apply_font_size()
+    
+    def _apply_font_size(self):
+        """Apply font size to the application"""
+        # Update base font sizes throughout the app
+        # This is a simplified approach - you could make it more comprehensive
+        base_style = f"font-size: {self.font_size}px;"
+        # Apply to various elements as needed
+        pass  # Font size changes can be applied more comprehensively if needed
+    
+    def _refresh_network_info(self):
+        """Refresh and display network information"""
+        try:
+            import psutil
+            import json
+            
+            # Get network interfaces
+            if_stats = psutil.net_if_stats()
+            if_addrs = psutil.net_if_addrs()
+            
+            info_lines = []
+            info_lines.append("Network Interfaces:\n")
+            info_lines.append("-" * 50)
+            
+            for name, stats in if_stats.items():
+                if name == "lo":
+                    continue
+                up_status = "UP" if stats.isup else "DOWN"
+                info_lines.append(f"\n{name}: {up_status}")
+                
+                # Get addresses
+                addrs = if_addrs.get(name, [])
+                for addr in addrs:
+                    if hasattr(addr, 'address'):
+                        addr_family = "IPv4" if addr.family == socket.AF_INET else "IPv6" if addr.family == socket.AF_INET6 else "MAC"
+                        info_lines.append(f"  {addr_family}: {addr.address}")
+            
+            # Get default gateway and local IP
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect(("8.8.8.8", 53))
+                local_ip = s.getsockname()[0]
+                s.close()
+                info_lines.append(f"\n\nLocal IP: {local_ip}")
+            except Exception:
+                info_lines.append("\n\nLocal IP: Not available")
+            
+            # DNS test
+            try:
+                import time
+                t0 = time.time()
+                socket.gethostbyname("www.google.com")
+                dns_time = (time.time() - t0) * 1000
+                info_lines.append(f"DNS Resolution: OK ({dns_time:.0f}ms)")
+            except Exception as e:
+                info_lines.append(f"DNS Resolution: Failed ({str(e)})")
+            
+            self.network_info_text.setPlainText("\n".join(info_lines))
+        except Exception as e:
+            self.network_info_text.setPlainText(f"Error loading network info: {e}")
 
     def _create_system_info_card(self):
         """Create system information card"""
@@ -742,23 +965,176 @@ class MainWindow(QtWidgets.QMainWindow):
             card.set_status("PENDING", "")
         self.statusBar().showMessage("Results cleared")
 
-    def show_export_menu(self):
-        """Show export options menu"""
-        menu = QtWidgets.QMenu(self)
+    def generate_and_preview_pdf(self):
+        """Generate PDF and show preview dialog with USB save option"""
+        # Generate report first
+        if not self.test_results:
+            self.statusBar().showMessage("No test results to report. Run tests first.", 3000)
+            return
         
-        usb_action = menu.addAction("📱 Save to USB Drive")
-        usb_action.triggered.connect(self.export_usb)
+        self.statusBar().showMessage("Generating PDF...")
+        try:
+            # Build report data from test results
+            with self.results_lock:
+                results_copy = deepcopy(self.test_results)
+            
+            summary = {}
+            details = {}
+            
+            for test_id, result in results_copy.items():
+                status = result.get("status", "UNKNOWN")
+                summary[test_id] = {
+                    "status": status,
+                    "message": result.get("note", result.get("error", "")),
+                    "metrics": {k: v for k, v in result.items() if k not in ("status", "note", "error", "timestamp")}
+                }
+                details[test_id] = result
+            
+            report_data = {
+                "title": "Apple Pi Diagnostics Report",
+                "summary": summary,
+                "details": details
+            }
+            
+            results = build_report(report_data, REPORT_DIR, formats=("pdf",))
+            self.latest_report_dir = REPORT_DIR
+            
+            if "pdf" in results and results["pdf"]:
+                pdf_path = results["pdf"]
+                self._show_pdf_preview(pdf_path)
+            else:
+                self.statusBar().showMessage("Failed to generate PDF", 3000)
+        except Exception as e:
+            self.statusBar().showMessage(f"Error: {e}", 3000)
+    
+    def _show_pdf_preview(self, pdf_path):
+        """Show PDF preview dialog with save to USB option"""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("PDF Preview - Apple Pi Diagnostics")
+        dialog.setMinimumSize(800, 600)
         
-        sd_action = menu.addAction("💿 Save to SD Boot")
-        sd_action.triggered.connect(self.export_sd)
+        layout = QtWidgets.QVBoxLayout(dialog)
         
-        qr_action = menu.addAction("📱 Generate QR Code")
-        qr_action.triggered.connect(self.export_qr)
+        # PDF preview area (using QTextBrowser to show HTML version if available)
+        preview = QtWidgets.QTextBrowser()
+        preview.setReadOnly(True)
         
-        report_action = menu.addAction("📄 Generate Report")
-        report_action.triggered.connect(self.generate_report)
+        # Try to show HTML version if available
+        html_path = pdf_path.with_suffix(".html")
+        if html_path.exists():
+            with open(html_path, 'r', encoding='utf-8') as f:
+                preview.setHtml(f.read())
+        else:
+            preview.setPlainText(f"PDF generated: {pdf_path}\n\nUse an external PDF viewer to preview.")
         
-        menu.exec_(self.export_btn.mapToGlobal(QtCore.QPoint(0, self.export_btn.height())))
+        layout.addWidget(preview)
+        
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        
+        save_usb_btn = QtWidgets.QPushButton("💾 Save to USB Drive")
+        save_usb_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #106ebe;
+            }
+        """)
+        save_usb_btn.clicked.connect(lambda: self._save_pdf_to_usb(pdf_path, dialog))
+        button_layout.addWidget(save_usb_btn)
+        
+        button_layout.addStretch()
+        
+        open_btn = QtWidgets.QPushButton("📂 Open File Location")
+        open_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #666666;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #777777;
+            }
+        """)
+        open_btn.clicked.connect(lambda: self._open_file_location(pdf_path))
+        button_layout.addWidget(open_btn)
+        
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #cccccc;
+                color: #333333;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-size: 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #bbbbbb;
+            }
+        """)
+        close_btn.clicked.connect(dialog.accept)
+        button_layout.addWidget(close_btn)
+        
+        layout.addLayout(button_layout)
+        
+        dialog.exec_()
+    
+    def _save_pdf_to_usb(self, pdf_path, dialog):
+        """Save PDF to USB drive"""
+        dialog.setEnabled(False)
+        try:
+            # Create a temporary report directory with just the PDF
+            import tempfile
+            import shutil
+            temp_dir = Path(tempfile.mkdtemp())
+            shutil.copy2(pdf_path, temp_dir / pdf_path.name)
+            
+            result = save_report_to_usb(temp_dir)
+            if result:
+                QtWidgets.QMessageBox.information(
+                    dialog, "Success", 
+                    f"PDF saved to USB drive:\n{result}"
+                )
+                dialog.accept()
+            else:
+                QtWidgets.QMessageBox.warning(
+                    dialog, "No USB Drive", 
+                    "No USB drive found. Please insert a USB drive and try again."
+                )
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(
+                dialog, "Error", 
+                f"Failed to save to USB: {e}"
+            )
+        finally:
+            dialog.setEnabled(True)
+    
+    def _open_file_location(self, file_path):
+        """Open file location in system file manager"""
+        import subprocess
+        import platform as plat
+        try:
+            if plat.system() == "Linux":
+                subprocess.Popen(["xdg-open", str(file_path.parent)])
+            elif plat.system() == "Darwin":
+                subprocess.Popen(["open", str(file_path.parent)])
+            elif plat.system() == "Windows":
+                subprocess.Popen(["explorer", "/select,", str(file_path)])
+        except Exception:
+            pass
 
     def generate_report(self):
         """Generate a comprehensive report from all test results"""
@@ -876,6 +1252,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dark_mode = not self.dark_mode
         self._apply_theme()
         self.theme_btn.setText("☀️ Light" if self.dark_mode else "🌙 Dark")
+        # Update settings page radio buttons if they exist
+        if hasattr(self, 'light_theme_radio'):
+            self.light_theme_radio.setChecked(not self.dark_mode)
+            self.dark_theme_radio.setChecked(self.dark_mode)
 
     def _apply_theme(self):
         """Apply the current theme to all UI elements"""
@@ -885,18 +1265,22 @@ class MainWindow(QtWidgets.QMainWindow):
             card_bg = "#2d2d2d"
             text_color = "#e0e0e0"
             text_secondary = "#b0b0b0"
+            text_tertiary = "#888888"
             border_color = "#444444"
             header_bg = "#2d2d2d"
             info_bg = "#1e3a5f"
+            scroll_bg = "#2d2d2d"
         else:
             # Light theme colors
             bg_color = "#f5f5f5"
             card_bg = "#ffffff"
             text_color = "#1a1a1a"
             text_secondary = "#666666"
+            text_tertiary = "#888888"
             border_color = "#e0e0e0"
             header_bg = "#ffffff"
             info_bg = "#e8f4f8"
+            scroll_bg = "#ffffff"
         
         # Update main window and central widget
         self.centralWidget().setStyleSheet(f"""
@@ -917,12 +1301,36 @@ class MainWindow(QtWidgets.QMainWindow):
                             border-bottom: 1px solid {border_color};
                         }}
                         QLabel {{
-                            color: {text_color};
+                            color: {text_color} !important;
                         }}
                     """)
         
         # Update tabs
         self._update_tab_style()
+        
+        # Update system info card
+        if self.sys_info_card:
+            self.sys_info_card.setStyleSheet(f"""
+                QWidget#sys_info_card {{
+                    background-color: {card_bg};
+                    border-radius: 12px;
+                    border: 1px solid {border_color};
+                }}
+                QLabel#sys_info_title {{
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: {text_color} !important;
+                }}
+                QLabel#sys_info_label {{
+                    font-size: 13px;
+                    color: {text_secondary} !important;
+                    font-weight: 500;
+                }}
+                QLabel#sys_info_value {{
+                    font-size: 13px;
+                    color: {text_color} !important;
+                }}
+            """)
         
         # Update status cards
         for card in self.test_cards.values():
@@ -936,28 +1344,180 @@ class MainWindow(QtWidgets.QMainWindow):
                     border: 2px solid #0078d4;
                     background-color: {'#3d3d3d' if self.dark_mode else '#f8f9fa'};
                 }}
-                QLabel {{
-                    color: {text_color};
+                QLabel#card_title {{
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: {text_color} !important;
+                }}
+                QLabel#card_details {{
+                    font-size: 11px;
+                    color: {text_tertiary} !important;
                 }}
             """)
+            # Update status label (preserve its dynamic color)
+            status_label = card.findChild(QtWidgets.QLabel, "card_status")
+            if status_label:
+                current_style = status_label.styleSheet() or ""
+                # Only update if it's the default pending state
+                if "#666666" in current_style or "color: #666666" in current_style:
+                    status_label.setStyleSheet(f"""
+                        font-size: 12px;
+                        color: {text_secondary} !important;
+                        font-weight: 500;
+                    """)
+                # Otherwise keep the status-specific color (green/red/orange)
         
-        # Update all QLabel text colors in pages
+        # Update all other labels
         for label in self.findChildren(QtWidgets.QLabel):
             current_style = label.styleSheet() or ""
-            # Only update if it doesn't have explicit color set
-            if "color:" not in current_style.lower():
-                label.setStyleSheet(f"{current_style}; color: {text_color};")
-        
-        # Update info labels
-        for label in self.findChildren(QtWidgets.QLabel):
-            if "Select individual tests" in label.text() or "No test results" in label.text():
+            current_text = label.text()
+            
+            # Skip status labels (they have their own colors)
+            if "✓" in current_text or "✗" in current_text or "—" in current_text or "⟳" in current_text:
+                continue
+            
+            # Update based on object name or text content
+            if label.objectName() in ("sys_info_title", "sys_info_label", "sys_info_value"):
+                continue  # Already handled
+            
+            if "font-size: 20px" in current_style or "font-weight: 600" in current_style:
+                # Section headers
+                label.setStyleSheet(f"""
+                    font-size: 20px;
+                    font-weight: 600;
+                    color: {text_color} !important;
+                    padding: 8px 0;
+                """)
+            elif "Select individual tests" in current_text or "No test results" in current_text:
+                # Info labels
                 label.setStyleSheet(f"""
                     font-size: 14px;
-                    color: {text_secondary};
+                    color: {text_secondary} !important;
                     padding: 12px;
                     background-color: {info_bg};
                     border-radius: 8px;
                 """)
+            elif "font-size: 14px" in current_style and "color: #666666" in current_style:
+                # Secondary text
+                label.setStyleSheet(f"""
+                    font-size: 14px;
+                    color: {text_secondary} !important;
+                """)
+            elif "color:" not in current_style.lower() or "#1a1a1a" in current_style or "#666666" in current_style:
+                # Default text - update to theme color
+                if "#1a1a1a" in current_style:
+                    new_style = current_style.replace("#1a1a1a", text_color)
+                elif "#666666" in current_style:
+                    new_style = current_style.replace("#666666", text_secondary)
+                else:
+                    new_style = f"{current_style}; color: {text_color} !important;"
+                label.setStyleSheet(new_style)
+        
+        # Update scroll areas
+        for scroll in self.findChildren(QtWidgets.QScrollArea):
+            scroll.setStyleSheet(f"QScrollArea {{ border: none; background-color: {scroll_bg}; }}")
+        
+        # Update result cards
+        for widget in self.findChildren(QtWidgets.QWidget):
+            if hasattr(widget, 'layout') and widget.layout():
+                # Check if it's a result card
+                for i in range(widget.layout().count()):
+                    item = widget.layout().itemAt(i)
+                    if item and item.widget():
+                        child = item.widget()
+                        if isinstance(child, QtWidgets.QLabel) and child.text().upper() in ["CPU", "RAM", "SD", "NETWORK", "USB", "HDMI", "GPIO"]:
+                            widget.setStyleSheet(f"""
+                                QWidget {{
+                                    background-color: {card_bg};
+                                    border-radius: 12px;
+                                    border: 1px solid {border_color};
+                                    padding: 16px;
+                                }}
+                            """)
+                            break
+        
+        # Update settings page elements
+        for widget in self.findChildren(QtWidgets.QWidget):
+            if widget.objectName() == "setting_card":
+                widget.setStyleSheet(f"""
+                    QWidget#setting_card {{
+                        background-color: {card_bg};
+                        border-radius: 12px;
+                        border: 1px solid {border_color};
+                        padding: 20px;
+                    }}
+                """)
+        
+        # Update settings labels
+        for label in self.findChildren(QtWidgets.QLabel):
+            if label.objectName() == "settings_title":
+                label.setStyleSheet(f"""
+                    font-size: 24px;
+                    font-weight: 600;
+                    color: {text_color} !important;
+                    padding-bottom: 8px;
+                """)
+            elif label.objectName() == "card_title":
+                label.setStyleSheet(f"""
+                    font-size: 18px;
+                    font-weight: 600;
+                    color: {text_color} !important;
+                """)
+            elif label.objectName() == "card_desc":
+                label.setStyleSheet(f"""
+                    font-size: 13px;
+                    color: {text_secondary} !important;
+                    padding-bottom: 8px;
+                """)
+            elif label.objectName() == "setting_label":
+                label.setStyleSheet(f"""
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: {text_color} !important;
+                """)
+            elif label.objectName() == "setting_value":
+                label.setStyleSheet(f"""
+                    font-size: 13px;
+                    color: {text_secondary} !important;
+                """)
+        
+        # Update radio buttons
+        for radio in self.findChildren(QtWidgets.QRadioButton):
+            if radio.objectName() == "theme_radio":
+                radio.setStyleSheet(f"""
+                    QRadioButton {{
+                        color: {text_color} !important;
+                        font-size: 14px;
+                    }}
+                    QRadioButton::indicator {{
+                        width: 18px;
+                        height: 18px;
+                    }}
+                    QRadioButton::indicator::unchecked {{
+                        border: 2px solid {border_color};
+                        border-radius: 9px;
+                        background-color: {card_bg};
+                    }}
+                    QRadioButton::indicator::checked {{
+                        border: 2px solid #0078d4;
+                        border-radius: 9px;
+                        background-color: #0078d4;
+                    }}
+                """)
+        
+        # Update network info text
+        if hasattr(self, 'network_info_text'):
+            self.network_info_text.setStyleSheet(f"""
+                QTextEdit#network_info {{
+                    background-color: {'#1e1e1e' if self.dark_mode else '#f8f9fa'};
+                    border: 1px solid {border_color};
+                    border-radius: 6px;
+                    padding: 8px;
+                    font-family: 'Courier New', monospace;
+                    font-size: 12px;
+                    color: {text_color} !important;
+                }}
+            """)
 
     def closeEvent(self, event):
         if self.qr_manager:

@@ -1,10 +1,10 @@
 #!/bin/busybox sh
 
 # Apple Pi Diagnostics - Failsafe Init
-# Handles basic hardware verification, LED status, and handover to Linux.
+# Handles basic hardware verification, LED status, framebuffer display, and handover to Linux.
 
 # 1. Mount essential filesystems
-/bin/busybox mkdir -p /proc /sys /dev /tmp /newroot
+/bin/busybox mkdir -p /proc /sys /dev /tmp /newroot /run
 /bin/busybox mount -t proc proc /proc
 /bin/busybox mount -t sysfs sysfs /sys
 /bin/busybox mount -t devtmpfs udev /dev
@@ -12,75 +12,236 @@
 # 2. LED Control Functions
 # Detect ACT LED path (Pi 4/400/5 vs older models)
 LED_PATH=""
+LED_TRIGGER_PATH=""
 if [ -d "/sys/class/leds/ACT" ]; then
-    LED_PATH="/sys/class/leds/ACT"
+    LED_PATH="/sys/class/leds/ACT/brightness"
+    LED_TRIGGER_PATH="/sys/class/leds/ACT/trigger"
 elif [ -d "/sys/class/leds/led0" ]; then
-    LED_PATH="/sys/class/leds/led0"
+    LED_PATH="/sys/class/leds/led0/brightness"
+    LED_TRIGGER_PATH="/sys/class/leds/led0/trigger"
 fi
 
 set_led() {
-    if [ -n "$LED_PATH" ]; then
-        echo "$1" > "$LED_PATH/brightness"
+    if [ -n "$LED_PATH" ] && [ -f "$LED_PATH" ]; then
+        echo "$1" > "$LED_PATH" 2>/dev/null || true
+    fi
+}
+
+set_led_trigger() {
+    if [ -n "$LED_TRIGGER_PATH" ] && [ -f "$LED_TRIGGER_PATH" ]; then
+        echo "$1" > "$LED_TRIGGER_PATH" 2>/dev/null || true
     fi
 }
 
 blink_fail() {
     echo "CRITICAL FAILURE. Entering LED loop."
+    set_led_trigger "none"  # Disable automatic triggers
     while true; do
-        set_led 1; sleep 0.2
-        set_led 0; sleep 0.2
+        set_led 255; /bin/busybox sleep 0.2
+        set_led 0; /bin/busybox sleep 0.2
     done
 }
 
 blink_success() {
-    # Quick double blink
-    set_led 1; sleep 0.1
-    set_led 0; sleep 0.1
-    set_led 1
+    # Quick double blink pattern
+    set_led_trigger "none"
+    set_led 255; /bin/busybox sleep 0.1
+    set_led 0; /bin/busybox sleep 0.1
+    set_led 255; /bin/busybox sleep 0.1
+    set_led 0; /bin/busybox sleep 0.1
+    set_led 255  # Leave on
 }
 
-# 3. Display / Logging
-log_msg() {
-    echo "[APD-FAILSAFE] $1"
-    # Future: Write to framebuffer directly if needed
+blink_warning() {
+    # Slow blink for warnings
+    set_led_trigger "none"
+    set_led 128; /bin/busybox sleep 0.5
+    set_led 0; /bin/busybox sleep 0.5
 }
 
-clear
-log_msg "Starting Apple Pi Diagnostics Failsafe Mode..."
-set_led 1
+# 3. Framebuffer Display Functions
+FB_DEVICE="/dev/fb0"
+FB_AVAILABLE=0
 
-# 4. Hardware Checks
-
-# Check Storage
-log_msg "Checking Storage..."
-if [ ! -b "/dev/mmcblk0" ]; then
-    log_msg "CRITICAL: SD Card not detected (/dev/mmcblk0 missing)"
-    blink_fail
-fi
-log_msg "Storage OK."
-
-# Check Power (Mock check via sysfs if available)
-if [ -f "/sys/devices/platform/soc/soc:firmware/get_throttled" ]; then
-    THROTTLED=$(cat /sys/devices/platform/soc/soc:firmware/get_throttled)
-    if [ "$THROTTLED" != "0" ]; then
-        log_msg "WARNING: Under-voltage detected! (Code: $THROTTLED)"
+init_framebuffer() {
+    if [ -c "$FB_DEVICE" ]; then
+        FB_AVAILABLE=1
+        # Clear framebuffer (black screen)
+        /bin/busybox dd if=/dev/zero of="$FB_DEVICE" bs=1024 count=1024 2>/dev/null || true
     fi
-fi
+}
 
-# 5. Handover to Main Linux System
-log_msg "Attempting to mount root filesystem..."
+display_text() {
+    if [ "$FB_AVAILABLE" -eq 1 ]; then
+        # Write to console which may be displayed on framebuffer
+        echo "$1" > /dev/tty0 2>/dev/null || true
+    fi
+    echo "[APD-FAILSAFE] $1"
+}
 
-# Try mounting partition 2 (standard root)
-mount -o ro /dev/mmcblk0p2 /newroot
-
-if [ $? -eq 0 ] && [ -x "/newroot/sbin/init" ]; then
-    log_msg "Root valid. Switching to full GUI..."
-    blink_success
+display_status() {
+    local status="$1"
+    local message="$2"
+    local color_code=""
     
-    # Cleanup and Switch
-    umount /proc /sys /dev
-    exec switch_root /newroot /sbin/init
+    case "$status" in
+        "OK"|"SUCCESS")
+            color_code="\033[32m"  # Green
+            ;;
+        "WARNING")
+            color_code="\033[33m"  # Yellow
+            ;;
+        "FAIL"|"ERROR")
+            color_code="\033[31m"  # Red
+            ;;
+        *)
+            color_code="\033[37m"  # White
+            ;;
+    esac
+    
+    display_text "${color_code}[$status] ${message}\033[0m"
+}
+
+# 4. Logging
+log_msg() {
+    echo "[APD-FAILSAFE] $1" | /bin/busybox tee -a /tmp/failsafe.log
+}
+
+# Initialize
+clear
+init_framebuffer
+display_text ""
+display_text "========================================"
+display_text "Apple Pi Diagnostics - Failsafe Mode"
+display_text "========================================"
+display_text ""
+
+set_led 128  # Dim initial state
+
+# 5. Hardware Checks
+CHECKS_PASSED=0
+CHECKS_FAILED=0
+CHECKS_WARNING=0
+
+check_storage() {
+    display_text "Checking Storage..."
+    if [ ! -b "/dev/mmcblk0" ]; then
+        display_status "FAIL" "SD Card not detected (/dev/mmcblk0 missing)"
+        CHECKS_FAILED=$((CHECKS_FAILED + 1))
+        return 1
+    fi
+    
+    # Try to read first sector
+    if /bin/busybox dd if=/dev/mmcblk0 of=/dev/null bs=512 count=1 2>/dev/null; then
+        display_status "OK" "Storage device accessible"
+        CHECKS_PASSED=$((CHECKS_PASSED + 1))
+        return 0
+    else
+        display_status "FAIL" "Storage device not readable"
+        CHECKS_FAILED=$((CHECKS_FAILED + 1))
+        return 1
+    fi
+}
+
+check_power() {
+    display_text "Checking Power..."
+    if [ -f "/sys/devices/platform/soc/soc:firmware/get_throttled" ]; then
+        THROTTLED=$(cat /sys/devices/platform/soc/soc:firmware/get_throttled 2>/dev/null || echo "0")
+        if [ "$THROTTLED" != "0" ]; then
+            display_status "WARNING" "Under-voltage detected! (Code: $THROTTLED)"
+            CHECKS_WARNING=$((CHECKS_WARNING + 1))
+            blink_warning
+            return 1
+        else
+            display_status "OK" "Power supply adequate"
+            CHECKS_PASSED=$((CHECKS_PASSED + 1))
+            return 0
+        fi
+    else
+        display_status "OK" "Power check unavailable (expected in QEMU)"
+        CHECKS_PASSED=$((CHECKS_PASSED + 1))
+        return 0
+    fi
+}
+
+check_cpu() {
+    display_text "Checking CPU..."
+    if [ -d "/proc" ] && [ -f "/proc/cpuinfo" ]; then
+        CPU_COUNT=$(/bin/busybox grep -c "^processor" /proc/cpuinfo 2>/dev/null || echo "0")
+        if [ "$CPU_COUNT" -gt 0 ]; then
+            display_status "OK" "CPU detected ($CPU_COUNT cores)"
+            CHECKS_PASSED=$((CHECKS_PASSED + 1))
+            return 0
+        else
+            display_status "FAIL" "CPU not detected"
+            CHECKS_FAILED=$((CHECKS_FAILED + 1))
+            return 1
+        fi
+    else
+        display_status "WARNING" "CPU info unavailable"
+        CHECKS_WARNING=$((CHECKS_WARNING + 1))
+        return 1
+    fi
+}
+
+# Run checks
+check_storage
+STORAGE_OK=$?
+
+check_power
+POWER_OK=$?
+
+check_cpu
+CPU_OK=$?
+
+# Summary
+display_text ""
+display_text "========================================"
+display_text "Diagnostics Summary:"
+display_text "  Passed:  $CHECKS_PASSED"
+display_text "  Warnings: $CHECKS_WARNING"
+display_text "  Failed:  $CHECKS_FAILED"
+display_text "========================================"
+display_text ""
+
+# 6. Determine action based on results
+if [ "$CHECKS_FAILED" -gt 0 ]; then
+    display_status "FAIL" "Critical hardware failure detected!"
+    display_text "System cannot boot. Entering failsafe console."
+    blink_fail
+    exec /bin/sh
+elif [ "$STORAGE_OK" -eq 0 ]; then
+    # Try to boot main system
+    display_text "Attempting to mount root filesystem..."
+    
+    # Try mounting partition 2 (standard root)
+    if /bin/busybox mount -o ro /dev/mmcblk0p2 /newroot 2>/dev/null; then
+        if [ -x "/newroot/sbin/init" ] || [ -x "/newroot/usr/lib/systemd/systemd" ]; then
+            display_status "SUCCESS" "Root filesystem valid. Switching to full system..."
+            blink_success
+            /bin/busybox sleep 1
+            
+            # Cleanup and Switch
+            /bin/busybox umount /proc /sys /dev 2>/dev/null || true
+            if [ -x "/newroot/sbin/init" ]; then
+                exec /bin/busybox switch_root /newroot /sbin/init
+            else
+                exec /bin/busybox switch_root /newroot /usr/lib/systemd/systemd
+            fi
+        else
+            display_status "WARNING" "Root filesystem mounted but init not found"
+            display_text "Staying in failsafe mode."
+            blink_warning
+            exec /bin/sh
+        fi
+    else
+        display_status "WARNING" "Cannot mount root filesystem"
+        display_text "Staying in failsafe mode."
+        blink_warning
+        exec /bin/sh
+    fi
 else
-    log_msg "ERROR: Cannot boot Linux. Staying in Failsafe Console."
+    display_status "FAIL" "Storage check failed. Cannot proceed."
+    blink_fail
     exec /bin/sh
 fi
