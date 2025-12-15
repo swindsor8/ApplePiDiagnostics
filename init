@@ -1,0 +1,86 @@
+#!/bin/busybox sh
+
+# Apple Pi Diagnostics - Failsafe Init
+# Handles basic hardware verification, LED status, and handover to Linux.
+
+# 1. Mount essential filesystems
+/bin/busybox mkdir -p /proc /sys /dev /tmp /newroot
+/bin/busybox mount -t proc proc /proc
+/bin/busybox mount -t sysfs sysfs /sys
+/bin/busybox mount -t devtmpfs udev /dev
+
+# 2. LED Control Functions
+# Detect ACT LED path (Pi 4/400/5 vs older models)
+LED_PATH=""
+if [ -d "/sys/class/leds/ACT" ]; then
+    LED_PATH="/sys/class/leds/ACT"
+elif [ -d "/sys/class/leds/led0" ]; then
+    LED_PATH="/sys/class/leds/led0"
+fi
+
+set_led() {
+    if [ -n "$LED_PATH" ]; then
+        echo "$1" > "$LED_PATH/brightness"
+    fi
+}
+
+blink_fail() {
+    echo "CRITICAL FAILURE. Entering LED loop."
+    while true; do
+        set_led 1; sleep 0.2
+        set_led 0; sleep 0.2
+    done
+}
+
+blink_success() {
+    # Quick double blink
+    set_led 1; sleep 0.1
+    set_led 0; sleep 0.1
+    set_led 1
+}
+
+# 3. Display / Logging
+log_msg() {
+    echo "[APD-FAILSAFE] $1"
+    # Future: Write to framebuffer directly if needed
+}
+
+clear
+log_msg "Starting Apple Pi Diagnostics Failsafe Mode..."
+set_led 1
+
+# 4. Hardware Checks
+
+# Check Storage
+log_msg "Checking Storage..."
+if [ ! -b "/dev/mmcblk0" ]; then
+    log_msg "CRITICAL: SD Card not detected (/dev/mmcblk0 missing)"
+    blink_fail
+fi
+log_msg "Storage OK."
+
+# Check Power (Mock check via sysfs if available)
+if [ -f "/sys/devices/platform/soc/soc:firmware/get_throttled" ]; then
+    THROTTLED=$(cat /sys/devices/platform/soc/soc:firmware/get_throttled)
+    if [ "$THROTTLED" != "0" ]; then
+        log_msg "WARNING: Under-voltage detected! (Code: $THROTTLED)"
+    fi
+fi
+
+# 5. Handover to Main Linux System
+log_msg "Attempting to mount root filesystem..."
+
+# Try mounting partition 2 (standard root)
+mount -o ro /dev/mmcblk0p2 /newroot
+
+if [ $? -eq 0 ] && [ -x "/newroot/sbin/init" ]; then
+    log_msg "Root valid. Switching to full GUI..."
+    blink_success
+    
+    # Cleanup and Switch
+    umount /proc /sys /dev
+    exec switch_root /newroot /sbin/init
+else
+    log_msg "ERROR: Cannot boot Linux. Staying in Failsafe Console."
+    exec /bin/sh
+fi

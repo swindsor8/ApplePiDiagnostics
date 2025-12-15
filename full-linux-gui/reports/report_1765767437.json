@@ -1,0 +1,509 @@
+{
+  "title": "Apple Pi Diagnostics Report",
+  "summary": {
+    "cpu": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "duration": 5,
+        "workers": 8,
+        "avg_cpu_percent": 97.75625,
+        "per_cpu_percent": [
+          98.45,
+          99.5,
+          98.0,
+          97.95,
+          98.5,
+          92.65,
+          99.0,
+          98.0
+        ],
+        "samples_count": 2,
+        "max_temperature": 72.0,
+        "samples": [
+          {
+            "percpu": [
+              97.9,
+              100.0,
+              99.0,
+              97.9,
+              98.0,
+              93.8,
+              99.0,
+              97.0
+            ],
+            "avg": 97.825,
+            "ts": 1765767390.0952418,
+            "temps": {
+              "acpitz": [
+                0.0,
+                0.0,
+                10.0
+              ],
+              "nvme": [
+                40.85
+              ],
+              "pch_skylake": [
+                58.0
+              ],
+              "coretemp": [
+                73.0,
+                69.0,
+                72.0,
+                69.0,
+                73.0
+              ],
+              "iwlwifi_1": [
+                48.0
+              ]
+            },
+            "max_temp": 73.0
+          },
+          {
+            "percpu": [
+              99.0,
+              99.0,
+              97.0,
+              98.0,
+              99.0,
+              91.5,
+              99.0,
+              99.0
+            ],
+            "avg": 97.6875,
+            "ts": 1765767391.1152203,
+            "temps": {
+              "acpitz": [
+                0.0,
+                0.0,
+                10.0
+              ],
+              "nvme": [
+                40.85
+              ],
+              "pch_skylake": [
+                58.0
+              ],
+              "coretemp": [
+                71.0,
+                71.0,
+                70.0,
+                69.0,
+                72.0
+              ],
+              "iwlwifi_1": [
+                48.0
+              ]
+            },
+            "max_temp": 72.0
+          }
+        ]
+      }
+    },
+    "usb": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "count": 8,
+        "devices": [
+          "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub",
+          "Bus 001 Device 002: ID 05e3:0608 Genesys Logic, Inc. Hub",
+          "Bus 001 Device 003: ID 8087:0a2a Intel Corp. Bluetooth wireless interface",
+          "Bus 001 Device 004: ID 0e8d:1887 MediaTek Inc. Slim Portable DVD Writer",
+          "Bus 001 Device 005: ID 13d3:56b2 IMC Networks Integrated Camera",
+          "Bus 001 Device 007: ID 04ca:008a Lite-On Technology Corp. Acer Wired Mouse Model SM-9023",
+          "Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub",
+          "Bus 002 Device 002: ID 0bc2:200e Seagate RSS LLC Game Drive for Xbox"
+        ]
+      }
+    },
+    "hdmi": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "count": 2,
+        "displays": [
+          {
+            "line": "eDP-1 connected primary 1920x1080+1920+0 (normal left inverted right x axis y axis) 344mm x 194mm",
+            "name": "eDP-1",
+            "resolution": "1920x1080+1920+0"
+          },
+          {
+            "line": "HDMI-A-1 connected 1920x1080+0+0 (normal left inverted right x axis y axis) 698mm x 393mm",
+            "name": "HDMI-A-1",
+            "resolution": "1920x1080+0+0"
+          }
+        ]
+      }
+    },
+    "sd": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "tested_mb": 4.0,
+        "write_mb_s": 1325.1098649395783,
+        "read_mb_s": 1810.6211957694798
+      }
+    },
+    "network": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "ping": [
+          {
+            "host": "8.8.8.8",
+            "ok": true,
+            "rc": 0,
+            "stdout_first": "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data."
+          },
+          {
+            "host": "1.1.1.1",
+            "ok": true,
+            "rc": 0,
+            "stdout_first": "PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data."
+          }
+        ],
+        "dns": {
+          "host": "www.google.com",
+          "ip": "142.250.191.164",
+          "ok": true,
+          "latency_s": 0.11156034469604492
+        },
+        "interfaces": [
+          {
+            "name": "wlp1s0",
+            "up": true,
+            "addrs": [
+              "192.168.1.27",
+              "2605:59ca:136c:4508:5bad:7c6c:c6db:fd62",
+              "fd76:e12c:5238:8:41af:f547:1fbe:f4da",
+              "fe80::73b9:b1c7:455c:6047%wlp1s0",
+              "ce:0e:bd:ac:57:2c"
+            ]
+          },
+          {
+            "name": "tailscale0",
+            "up": true,
+            "addrs": [
+              "100.125.227.126",
+              "fd7a:115c:a1e0::e901:e389",
+              "fe80::e437:87d:9efe:f6e6%tailscale0"
+            ]
+          }
+        ],
+        "local_ip": "192.168.1.27"
+      }
+    },
+    "gpio": {
+      "status": "UNSUPPORTED",
+      "message": "No Raspberry Pi GPIO libraries available",
+      "metrics": {}
+    },
+    "ram": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "tested_mb": 64.0,
+        "errors": [],
+        "throughput_mb_s": 3.959060696212402,
+        "samples": [
+          {
+            "pass": 1,
+            "tested_mb": 16.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 4.043093204498291,
+            "read_time_s": 0.002532482147216797,
+            "timestamp": 1765767415.606174
+          },
+          {
+            "pass": 1,
+            "tested_mb": 32.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 4.044280052185059,
+            "read_time_s": 0.00244903564453125,
+            "timestamp": 1765767419.657544
+          },
+          {
+            "pass": 1,
+            "tested_mb": 48.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 4.259272813796997,
+            "read_time_s": 0.0021452903747558594,
+            "timestamp": 1765767423.9189842
+          },
+          {
+            "pass": 1,
+            "tested_mb": 64.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 3.803779363632202,
+            "read_time_s": 0.003183126449584961,
+            "timestamp": 1765767427.725967
+          }
+        ]
+      }
+    }
+  },
+  "details": {
+    "cpu": {
+      "status": "OK",
+      "duration": 5,
+      "workers": 8,
+      "avg_cpu_percent": 97.75625,
+      "per_cpu_percent": [
+        98.45,
+        99.5,
+        98.0,
+        97.95,
+        98.5,
+        92.65,
+        99.0,
+        98.0
+      ],
+      "samples_count": 2,
+      "max_temperature": 72.0,
+      "samples": [
+        {
+          "percpu": [
+            97.9,
+            100.0,
+            99.0,
+            97.9,
+            98.0,
+            93.8,
+            99.0,
+            97.0
+          ],
+          "avg": 97.825,
+          "ts": 1765767390.0952418,
+          "temps": {
+            "acpitz": [
+              0.0,
+              0.0,
+              10.0
+            ],
+            "nvme": [
+              40.85
+            ],
+            "pch_skylake": [
+              58.0
+            ],
+            "coretemp": [
+              73.0,
+              69.0,
+              72.0,
+              69.0,
+              73.0
+            ],
+            "iwlwifi_1": [
+              48.0
+            ]
+          },
+          "max_temp": 73.0
+        },
+        {
+          "percpu": [
+            99.0,
+            99.0,
+            97.0,
+            98.0,
+            99.0,
+            91.5,
+            99.0,
+            99.0
+          ],
+          "avg": 97.6875,
+          "ts": 1765767391.1152203,
+          "temps": {
+            "acpitz": [
+              0.0,
+              0.0,
+              10.0
+            ],
+            "nvme": [
+              40.85
+            ],
+            "pch_skylake": [
+              58.0
+            ],
+            "coretemp": [
+              71.0,
+              71.0,
+              70.0,
+              69.0,
+              72.0
+            ],
+            "iwlwifi_1": [
+              48.0
+            ]
+          },
+          "max_temp": 72.0
+        }
+      ],
+      "timestamp": "2025-12-14 20:56:31"
+    },
+    "usb": {
+      "status": "OK",
+      "count": 8,
+      "devices": [
+        "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub",
+        "Bus 001 Device 002: ID 05e3:0608 Genesys Logic, Inc. Hub",
+        "Bus 001 Device 003: ID 8087:0a2a Intel Corp. Bluetooth wireless interface",
+        "Bus 001 Device 004: ID 0e8d:1887 MediaTek Inc. Slim Portable DVD Writer",
+        "Bus 001 Device 005: ID 13d3:56b2 IMC Networks Integrated Camera",
+        "Bus 001 Device 007: ID 04ca:008a Lite-On Technology Corp. Acer Wired Mouse Model SM-9023",
+        "Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub",
+        "Bus 002 Device 002: ID 0bc2:200e Seagate RSS LLC Game Drive for Xbox"
+      ],
+      "timestamp": "2025-12-14 20:56:40"
+    },
+    "hdmi": {
+      "status": "OK",
+      "count": 2,
+      "displays": [
+        {
+          "line": "eDP-1 connected primary 1920x1080+1920+0 (normal left inverted right x axis y axis) 344mm x 194mm",
+          "name": "eDP-1",
+          "resolution": "1920x1080+1920+0"
+        },
+        {
+          "line": "HDMI-A-1 connected 1920x1080+0+0 (normal left inverted right x axis y axis) 698mm x 393mm",
+          "name": "HDMI-A-1",
+          "resolution": "1920x1080+0+0"
+        }
+      ],
+      "timestamp": "2025-12-14 20:56:42"
+    },
+    "sd": {
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 1325.1098649395783,
+      "read_mb_s": 1810.6211957694798,
+      "timestamp": "2025-12-14 20:56:46"
+    },
+    "network": {
+      "status": "OK",
+      "ping": [
+        {
+          "host": "8.8.8.8",
+          "ok": true,
+          "rc": 0,
+          "stdout_first": "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data."
+        },
+        {
+          "host": "1.1.1.1",
+          "ok": true,
+          "rc": 0,
+          "stdout_first": "PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data."
+        }
+      ],
+      "dns": {
+        "host": "www.google.com",
+        "ip": "142.250.191.164",
+        "ok": true,
+        "latency_s": 0.11156034469604492
+      },
+      "interfaces": [
+        {
+          "name": "wlp1s0",
+          "up": true,
+          "addrs": [
+            "192.168.1.27",
+            "2605:59ca:136c:4508:5bad:7c6c:c6db:fd62",
+            "fd76:e12c:5238:8:41af:f547:1fbe:f4da",
+            "fe80::73b9:b1c7:455c:6047%wlp1s0",
+            "ce:0e:bd:ac:57:2c"
+          ]
+        },
+        {
+          "name": "tailscale0",
+          "up": true,
+          "addrs": [
+            "100.125.227.126",
+            "fd7a:115c:a1e0::e901:e389",
+            "fe80::e437:87d:9efe:f6e6%tailscale0"
+          ]
+        }
+      ],
+      "local_ip": "192.168.1.27",
+      "timestamp": "2025-12-14 20:56:49"
+    },
+    "gpio": {
+      "status": "UNSUPPORTED",
+      "note": "No Raspberry Pi GPIO libraries available",
+      "timestamp": "2025-12-14 20:56:57"
+    },
+    "ram": {
+      "status": "OK",
+      "tested_mb": 64.0,
+      "errors": [],
+      "throughput_mb_s": 3.959060696212402,
+      "samples": [
+        {
+          "pass": 1,
+          "tested_mb": 16.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 4.043093204498291,
+          "read_time_s": 0.002532482147216797,
+          "timestamp": 1765767415.606174
+        },
+        {
+          "pass": 1,
+          "tested_mb": 32.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 4.044280052185059,
+          "read_time_s": 0.00244903564453125,
+          "timestamp": 1765767419.657544
+        },
+        {
+          "pass": 1,
+          "tested_mb": 48.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 4.259272813796997,
+          "read_time_s": 0.0021452903747558594,
+          "timestamp": 1765767423.9189842
+        },
+        {
+          "pass": 1,
+          "tested_mb": 64.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 3.803779363632202,
+          "read_time_s": 0.003183126449584961,
+          "timestamp": 1765767427.725967
+        }
+      ],
+      "timestamp": "2025-12-14 20:57:07"
+    }
+  },
+  "metadata": {
+    "timestamp": 1765767437.4153438,
+    "generated": "Sun Dec 14 20:57:17 2025",
+    "hostname": "customer.mplsmnx1.isp.starlink.com",
+    "platform": "Linux-6.17.10-300.fc43.x86_64-x86_64-with-glibc2.42",
+    "python": "3.14.2",
+    "os_release": {
+      "NAME": "Fedora Linux",
+      "VERSION": "43 (KDE Plasma Desktop Edition)",
+      "RELEASE_TYPE": "stable",
+      "ID": "fedora",
+      "VERSION_ID": "43",
+      "VERSION_CODENAME": "",
+      "PRETTY_NAME": "Fedora Linux 43 (KDE Plasma Desktop Edition)",
+      "ANSI_COLOR": "0;38;2;60;110;180",
+      "LOGO": "fedora-logo-icon",
+      "CPE_NAME": "cpe:/o:fedoraproject:fedora:43",
+      "DEFAULT_HOSTNAME": "fedora",
+      "HOME_URL": "https://fedoraproject.org/",
+      "DOCUMENTATION_URL": "https://docs.fedoraproject.org/en-US/fedora/f43/",
+      "SUPPORT_URL": "https://ask.fedoraproject.org/",
+      "BUG_REPORT_URL": "https://bugzilla.redhat.com/",
+      "REDHAT_BUGZILLA_PRODUCT": "Fedora",
+      "REDHAT_BUGZILLA_PRODUCT_VERSION": "43",
+      "REDHAT_SUPPORT_PRODUCT": "Fedora",
+      "REDHAT_SUPPORT_PRODUCT_VERSION": "43",
+      "SUPPORT_END": "2026-12-02",
+      "VARIANT": "KDE Plasma Desktop Edition",
+      "VARIANT_ID": "kde"
+    },
+    "pi_model": null
+  }
+}

@@ -1,0 +1,100 @@
+<!doctype html>
+<html><head>
+<title>Apple Pi Diagnostics Report</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+    body{font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial; padding:1rem;}
+    header{display:flex;align-items:center;gap:10px}
+    img.logo{width:48px;height:48px}
+    .meta{font-size:0.9rem;color:#444}
+    .card{border:1px solid #eee;padding:0.75rem;margin:0.5rem 0;border-radius:8px}
+    pre.json{white-space:pre-wrap;word-break:break-word;background:#f8f8f8;padding:0.5rem;border-radius:6px}
+    @media (max-width:420px){body{padding:0.5rem}}</style>
+</head><body>
+<header><div><img class="logo" src="file:///home/seth/Apple-Pi-Diagnostics/ApplePiDiagnostics/full-linux-gui/app/assets/apple_pi_logo.png" alt="logo"></div><div><h1>Apple Pi Diagnostics Report</h1><div class="meta">Generated: Sun Dec 14 20:37:25 2025</div></div></header>
+<section class="card"><h2>Summary</h2>
+<div><strong>CPU:</strong> <em>PASS</em> CPU operating normally</div>
+<div><strong>RAM:</strong> <em>PASS</em> Memory test successful</div>
+<div><strong>Storage:</strong> <em>PASS</em> SD card healthy</div>
+</section>
+<section class="card"><h2>Details</h2>
+<h3>cpu</h3>
+<pre class="json">{
+  "avg_cpu_percent": 10.5
+}</pre>
+<h3>ram</h3>
+<pre class="json">{
+  "tested_mb": 128,
+  "throughput_mb_s": 150.2
+}</pre>
+<h3>storage</h3>
+<pre class="json">{
+  "read_mb_s": 22.1,
+  "write_mb_s": 18.7
+}</pre>
+</section>
+<section class="card"><h2>Full JSON</h2>
+<pre class="json">{
+  "summary": {
+    "CPU": {
+      "status": "PASS",
+      "message": "CPU operating normally"
+    },
+    "RAM": {
+      "status": "PASS",
+      "message": "Memory test successful"
+    },
+    "Storage": {
+      "status": "PASS",
+      "message": "SD card healthy"
+    }
+  },
+  "details": {
+    "cpu": {
+      "avg_cpu_percent": 10.5
+    },
+    "ram": {
+      "tested_mb": 128,
+      "throughput_mb_s": 150.2
+    },
+    "storage": {
+      "read_mb_s": 22.1,
+      "write_mb_s": 18.7
+    }
+  },
+  "title": "Apple Pi Diagnostics Report",
+  "metadata": {
+    "timestamp": 1765766245.7790186,
+    "generated": "Sun Dec 14 20:37:25 2025",
+    "hostname": "customer.mplsmnx1.isp.starlink.com",
+    "platform": "Linux-6.17.10-300.fc43.x86_64-x86_64-with-glibc2.42",
+    "python": "3.14.2",
+    "os_release": {
+      "NAME": "Fedora Linux",
+      "VERSION": "43 (KDE Plasma Desktop Edition)",
+      "RELEASE_TYPE": "stable",
+      "ID": "fedora",
+      "VERSION_ID": "43",
+      "VERSION_CODENAME": "",
+      "PRETTY_NAME": "Fedora Linux 43 (KDE Plasma Desktop Edition)",
+      "ANSI_COLOR": "0;38;2;60;110;180",
+      "LOGO": "fedora-logo-icon",
+      "CPE_NAME": "cpe:/o:fedoraproject:fedora:43",
+      "DEFAULT_HOSTNAME": "fedora",
+      "HOME_URL": "https://fedoraproject.org/",
+      "DOCUMENTATION_URL": "https://docs.fedoraproject.org/en-US/fedora/f43/",
+      "SUPPORT_URL": "https://ask.fedoraproject.org/",
+      "BUG_REPORT_URL": "https://bugzilla.redhat.com/",
+      "REDHAT_BUGZILLA_PRODUCT": "Fedora",
+      "REDHAT_BUGZILLA_PRODUCT_VERSION": "43",
+      "REDHAT_SUPPORT_PRODUCT": "Fedora",
+      "REDHAT_SUPPORT_PRODUCT_VERSION": "43",
+      "SUPPORT_END": "2026-12-02",
+      "VARIANT": "KDE Plasma Desktop Edition",
+      "VARIANT_ID": "kde"
+    },
+    "pi_model": null
+  }
+}</pre>
+</section>
+</body></html>

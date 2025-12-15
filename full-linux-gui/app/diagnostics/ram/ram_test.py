@@ -13,7 +13,7 @@ for live updates (same pattern as CPU test).
 from __future__ import annotations
 
 import time
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 
 import psutil
 
@@ -26,7 +26,7 @@ def _make_pattern(size: int) -> bytearray:
     return b
 
 
-def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None, stop_event: Optional[object] = None) -> Dict[str, Any]:
+def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[Callable] = None, stop_event: Optional[object] = None) -> Dict[str, Any]:
     """Run RAM write/read verification.
 
     Args:
@@ -120,7 +120,7 @@ def run_ram_test(total_mb: int = 256, chunk_mb: int = 16, passes: int = 1, progr
     }
 
 
-def run_ram_quick_test(total_mb: int = 64, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[callable] = None, stop_event: Optional[object] = None) -> Dict[str, Any]:
+def run_ram_quick_test(total_mb: int = 64, chunk_mb: int = 16, passes: int = 1, progress_callback: Optional[Callable] = None, stop_event: Optional[object] = None) -> Dict[str, Any]:
     """Quick RAM test wrapper with smaller defaults."""
     return run_ram_test(total_mb=total_mb, chunk_mb=chunk_mb, passes=passes, progress_callback=progress_callback, stop_event=stop_event)
 
