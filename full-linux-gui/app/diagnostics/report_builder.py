@@ -410,6 +410,25 @@ def build_report(report_data: Dict[str, Any], out_dir: Path, formats: Sequence[s
 
     return results
 
+def build_sample_report(out_dir):
+    """
+    Temporary helper used by the GUI to verify report generation.
+    This will be replaced once real diagnostics are wired in.
+    """
+    sample_data = {
+        "summary": {
+            "CPU": {"status": "PASS", "message": "CPU operating normally"},
+            "RAM": {"status": "PASS", "message": "Memory test successful"},
+            "Storage": {"status": "PASS", "message": "SD card healthy"},
+        },
+        "details": {
+            "cpu": {"avg_cpu_percent": 10.5},
+            "ram": {"tested_mb": 128, "throughput_mb_s": 150.2},
+            "storage": {"read_mb_s": 22.1, "write_mb_s": 18.7},
+        },
+    }
+
+    return build_report(sample_data, out_dir, formats=("pdf", "html", "json", "qr"))
 
 if __name__ == "__main__":
     # quick local smoke test producing all three formats using sample data
