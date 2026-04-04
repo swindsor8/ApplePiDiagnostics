@@ -1,0 +1,48 @@
+name: Mark Stale Issues and PRs
+
+# Runs daily and marks issues/PRs as stale after 60 days of no activity.
+# Stale items are closed after a further 14 days unless new activity occurs
+# or the item is labelled keep-open, in-progress, or bug.
+# Can also be triggered manually from the Actions tab.
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # Daily at 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/stale@v9
+        with:
+          stale-issue-message: >
+            This issue has been automatically marked as stale because it has
+            had no activity for 60 days. It will be closed in 14 days if no
+            further activity occurs. Add a comment or remove the **stale**
+            label to keep it open.
+          stale-pr-message: >
+            This pull request has been automatically marked as stale because
+            it has had no activity for 60 days. It will be closed in 14 days
+            unless there is new activity or it is labelled **keep-open**.
+          close-issue-message: >
+            This issue was closed automatically after 14 days of inactivity
+            following the stale label being applied. Feel free to re-open if
+            it is still relevant.
+          close-pr-message: >
+            This PR was closed automatically after 14 days of inactivity.
+            Feel free to re-open if the work is still in progress.
+          days-before-stale: 60
+          days-before-close: 14
+          stale-issue-label: 'stale'
+          stale-pr-label: 'stale'
+          # Issues/PRs with any of these labels are never marked stale
+          exempt-issue-labels: 'keep-open,in-progress,bug,security'
+          exempt-pr-labels: 'keep-open,in-progress,security'
+          # Do not mark issues as stale if they have no labels (untriagged)
+          exempt-all-issues-without-assignees: false

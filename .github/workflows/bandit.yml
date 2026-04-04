@@ -1,0 +1,58 @@
+name: Bandit Security Scan
+
+# Python SAST via Bandit — catches hardcoded credentials, insecure subprocess
+# calls, weak crypto, and injection flaws in the Python codebase.
+# Results are uploaded to the GitHub Security tab as SARIF so findings appear
+# alongside CodeQL alerts.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'full-linux-gui/app/**/*.py'
+      - '.github/workflows/bandit.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'full-linux-gui/app/**/*.py'
+      - '.github/workflows/bandit.yml'
+  schedule:
+    - cron: '0 9 * * 1'   # Weekly Monday 09:00 UTC
+  workflow_dispatch:
+
+jobs:
+  bandit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write   # required to upload SARIF to GitHub Security tab
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
+      - name: Install Bandit
+        run: pip install "bandit[sarif]"
+
+      - name: Run Bandit
+        # Exit code 1 = issues found; we still want to upload the SARIF report,
+        # so we use `|| true` here and let the upload step surface the findings.
+        run: |
+          bandit -r full-linux-gui/app/ \
+            --format sarif \
+            --output bandit-results.sarif \
+            --severity-level medium \
+            || true
+
+      - name: Upload SARIF to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: bandit-results.sarif
+          category: bandit

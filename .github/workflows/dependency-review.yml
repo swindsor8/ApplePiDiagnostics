@@ -1,0 +1,32 @@
+name: Dependency Review
+
+# Runs on every pull request targeting main and blocks merges that introduce
+# dependencies with known CVEs at moderate severity or above.
+# Complements Dependabot (which updates existing deps) by preventing vulnerable
+# NEW deps from landing in the first place.
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write   # post inline summary comment on the PR
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
+        with:
+          # Fail the job if any dependency with moderate, high, or critical
+          # severity is introduced by this PR.
+          fail-on-severity: moderate
+          # Post a summary table directly on the PR so reviewers can see
+          # what changed without leaving GitHub.
+          comment-summary-in-pr: always

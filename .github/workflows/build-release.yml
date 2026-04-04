@@ -10,6 +10,7 @@ jobs:
   build:
     name: Build flashable image
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     permissions:
       contents: write   # needed to create GitHub Releases
 
@@ -60,6 +61,9 @@ jobs:
         id: meta
         run: |
           XZ_FILE="apple-pi-diagnostics.img.xz"
+          [[ -f "$XZ_FILE" ]]                      || { echo "ERROR: $XZ_FILE not found — build failed"; exit 1; }
+          [[ -f "${XZ_FILE}.sha256" ]]             || { echo "ERROR: SHA256 file not found — build failed"; exit 1; }
+          [[ -f "apple-pi-diagnostics.img" ]]      || { echo "ERROR: .img not found — build failed"; exit 1; }
           SHA256=$(awk '{print $1}' apple-pi-diagnostics.img.xz.sha256)
           XZ_SIZE=$(stat -c%s "${XZ_FILE}")
           RAW_SIZE=$(stat -c%s "apple-pi-diagnostics.img")

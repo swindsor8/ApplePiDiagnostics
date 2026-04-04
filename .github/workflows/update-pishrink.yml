@@ -13,6 +13,7 @@ on:
 jobs:
   check-and-update:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write        # push branch
       pull-requests: write   # open PR
@@ -42,8 +43,11 @@ jobs:
 
       - name: Determine if update is needed
         id: changed
+        env:
+          BEFORE: ${{ steps.before.outputs.commit }}
+          AFTER: ${{ steps.after.outputs.commit }}
         run: |
-          if [ "${{ steps.before.outputs.commit }}" != "${{ steps.after.outputs.commit }}" ]; then
+          if [ "$BEFORE" != "$AFTER" ]; then
             echo "updated=true" >> "$GITHUB_OUTPUT"
           else
             echo "updated=false" >> "$GITHUB_OUTPUT"

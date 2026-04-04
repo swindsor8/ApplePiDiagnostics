@@ -1,0 +1,79 @@
+name: Validate Release
+
+# Triggered automatically when a GitHub Release is published.
+# Downloads the release assets, verifies the SHA256 checksum matches the
+# published .sha256 file, and validates that os_list.json was correctly stamped
+# (no placeholder values remain, required fields are present).
+# Catches corrupted uploads or stamping bugs before users download the image.
+
+on:
+  release:
+    types: [ published ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release download "${TAG}" \
+            --pattern "apple-pi-diagnostics.img.xz" \
+            --pattern "apple-pi-diagnostics.img.xz.sha256" \
+            --pattern "os_list.json"
+
+      - name: Verify SHA256 checksum
+        run: |
+          EXPECTED=$(awk '{print $1}' apple-pi-diagnostics.img.xz.sha256)
+          ACTUAL=$(sha256sum apple-pi-diagnostics.img.xz | awk '{print $1}')
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "::error::SHA256 MISMATCH on apple-pi-diagnostics.img.xz"
+            echo "  Expected: $EXPECTED"
+            echo "  Actual:   $ACTUAL"
+            exit 1
+          fi
+          echo "SHA256 verified OK: $ACTUAL"
+
+      - name: Validate os_list.json
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+
+          with open("os_list.json") as f:
+              data = json.load(f)
+
+          assert "os_list" in data, "Missing top-level 'os_list' key"
+          assert len(data["os_list"]) > 0, "'os_list' array is empty"
+
+          entry = data["os_list"][0]
+          required_fields = ["url", "extract_size", "image_download_size", "release_date", "sha256"]
+          for field in required_fields:
+              assert field in entry, f"Missing required field: '{field}'"
+
+          # Verify placeholder values were replaced during the build
+          assert entry["url"] != "RELEASE_URL_PLACEHOLDER", \
+              "url field still contains placeholder — stamping failed"
+          assert entry["sha256"] != "SHA256_PLACEHOLDER", \
+              "sha256 field still contains placeholder — stamping failed"
+          assert entry["extract_size"] != 0, \
+              "extract_size is 0 — stamping failed"
+          assert entry["image_download_size"] != 0, \
+              "image_download_size is 0 — stamping failed"
+          assert entry["release_date"] != "RELEASE_DATE_PLACEHOLDER", \
+              "release_date field still contains placeholder — stamping failed"
+
+          print("os_list.json validation passed")
+          print(f"  URL:           {entry['url']}")
+          print(f"  Release date:  {entry['release_date']}")
+          print(f"  Download size: {entry['image_download_size']:,} bytes")
+          print(f"  Extract size:  {entry['extract_size']:,} bytes")
+          EOF
