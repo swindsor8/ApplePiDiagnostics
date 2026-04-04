@@ -1,0 +1,14 @@
+#!/bin/sh
+# Apple Pi Diagnostics — X11 kiosk session
+# Launched by startx; runs the GUI fullscreen with no cursor or screen saver.
+
+# Disable screen blanking and power management
+xset s off
+xset -dpms
+xset s noblank
+
+# Hide the mouse cursor when idle (requires unclutter)
+unclutter -idle 0 -root &
+
+# Launch the diagnostic GUI — exec replaces this shell so X exits when app exits
+exec python3 /opt/apple-pi-diagnostics/full-linux-gui/app/main.py

@@ -556,65 +556,33 @@ class MainWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
-        
+
         # System information card
         self.sys_info_card = self._create_system_info_card()
         layout.addWidget(self.sys_info_card)
-        
-        # Quick stats
-        stats_label = QtWidgets.QLabel("Quick Status")
-        stats_label.setStyleSheet("""
+
+        # Boot checks section label
+        checks_label = QtWidgets.QLabel("Boot Checks")
+        checks_label.setStyleSheet("""
             font-size: 20px;
             font-weight: 600;
             color: #1a1a1a;
             padding: 8px 0;
         """)
-        layout.addWidget(stats_label)
-        
-        # Test summary cards
-        summary_grid = QtWidgets.QGridLayout()
-        summary_grid.setSpacing(16)
-        
-        tests = [
-            ("CPU", "cpu", "cpu"),
-            ("RAM", "ram", "ram"),
-            ("Storage", "sd", "sd"),
-            ("Network", "network", "network"),
-            ("USB", "usb", "usb"),
-            ("HDMI", "hdmi", "hdmi"),
-            ("GPIO", "gpio", "gpio"),
-        ]
-        
-        row, col = 0, 0
-        for title, icon, test_id in tests:
-            # Create separate cards for overview (read-only status display)
-            card = StatusCard(title, icon)
-            card.flat_mode = True
-            card.test_btn.hide()
-            self.overview_cards[test_id] = card
-            # Update status from test results if available
-            if test_id in self.test_results:
-                with self.results_lock:
-                    result = self.test_results.get(test_id, {})
-                status = result.get("status", "PENDING")
-                details = result.get("note", "")
-                if not details:
-                    if "avg_cpu_percent" in result:
-                        details = f"CPU: {result['avg_cpu_percent']:.1f}%"
-                    elif "tested_mb" in result:
-                        details = f"Tested: {result['tested_mb']:.0f} MB"
-                    elif "count" in result:
-                        details = f"Found: {result['count']} items"
-                card.set_status(status, details)
-            summary_grid.addWidget(card, row, col)
-            col += 1
-            if col >= 4:
-                col = 0
-                row += 1
-        
-        layout.addLayout(summary_grid)
+        layout.addWidget(checks_label)
+
+        # Placeholder populated by show_startup_banner()
+        self._overview_checks_panel = QtWidgets.QWidget()
+        self._overview_checks_panel.setStyleSheet("background: transparent;")
+        self._overview_checks_panel_layout = QtWidgets.QVBoxLayout(self._overview_checks_panel)
+        self._overview_checks_panel_layout.setContentsMargins(0, 0, 0, 0)
+        self._overview_checks_panel_layout.setSpacing(8)
+        waiting_lbl = QtWidgets.QLabel("Waiting for boot checks…")
+        waiting_lbl.setStyleSheet("font-size: 13px; color: #888888;")
+        self._overview_checks_panel_layout.addWidget(waiting_lbl)
+        layout.addWidget(self._overview_checks_panel)
+
         layout.addStretch()
-        
         return page
 
     def _create_testing_page(self):
@@ -963,13 +931,65 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"Error loading system info: {e}")
 
     def show_startup_banner(self, results):
-        """Display the pre-boot check results banner below the header."""
-        if not results:
+        """Populate the Overview Boot Checks panel with pre-boot check results."""
+        if not results or not hasattr(self, "_overview_checks_panel_layout"):
             return
-        self.startup_banner = StartupBanner(results, parent=self._banner_container)
-        self._banner_layout.addWidget(self.startup_banner)
-        self._banner_container.setVisible(True)
-        self.startup_banner.show()
+
+        # Clear placeholder content
+        while self._overview_checks_panel_layout.count():
+            item = self._overview_checks_panel_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        passed = sum(1 for r in results if r.get("passed"))
+        total = len(results)
+        all_ok = passed == total
+
+        # Summary row
+        if all_ok:
+            summary_col, summary_icon = "#166534", "✓"
+            summary_bg, summary_border = "#dcfce7", "#10b981"
+        else:
+            summary_col, summary_icon = "#713f12", "⚠"
+            summary_bg, summary_border = "#fef9c3", "#f59e0b"
+
+        summary_row = QtWidgets.QWidget()
+        summary_row.setStyleSheet(f"""
+            QWidget {{
+                background-color: {summary_bg};
+                border-left: 4px solid {summary_border};
+                border-radius: 4px;
+            }}
+        """)
+        summary_row_layout = QtWidgets.QHBoxLayout(summary_row)
+        summary_row_layout.setContentsMargins(12, 8, 12, 8)
+        summary_lbl = QtWidgets.QLabel(f"{summary_icon}  Pre-boot checks: {passed} / {total} passed")
+        summary_lbl.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {summary_col}; background: transparent;")
+        summary_row_layout.addWidget(summary_lbl)
+        summary_row_layout.addStretch()
+        self._overview_checks_panel_layout.addWidget(summary_row)
+
+        # Individual check rows
+        for r in results:
+            chk_icon = "✓" if r.get("passed") else "⚠"
+            chk_col = "#166534" if r.get("passed") else "#713f12"
+            row_widget = QtWidgets.QWidget()
+            row_widget.setStyleSheet("background: transparent;")
+            row_layout = QtWidgets.QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(16, 2, 0, 2)
+            row_layout.setSpacing(8)
+            icon_lbl = QtWidgets.QLabel(chk_icon)
+            icon_lbl.setStyleSheet(f"font-size: 14px; color: {chk_col}; background: transparent;")
+            icon_lbl.setFixedWidth(18)
+            name_lbl = QtWidgets.QLabel(f"<b>{r['name']}</b>")
+            name_lbl.setStyleSheet(f"font-size: 13px; color: #1a1a1a; background: transparent;")
+            detail_lbl = QtWidgets.QLabel(r.get("detail", ""))
+            detail_lbl.setStyleSheet("font-size: 13px; color: #555555; background: transparent;")
+            row_layout.addWidget(icon_lbl)
+            row_layout.addWidget(name_lbl)
+            row_layout.addWidget(detail_lbl)
+            row_layout.addStretch()
+            self._overview_checks_panel_layout.addWidget(row_widget)
 
     @QtCore.pyqtSlot()
     def _update_results_display(self):
@@ -1672,38 +1692,6 @@ class MainWindow(QtWidgets.QMainWindow):
                         font-weight: 500;
                     """)
 
-        for card in self.overview_cards.values():
-            card.set_icon_color("#555555")
-            card.setStyleSheet(f"""
-                StatusCard {{
-                    background-color: transparent;
-                    border: none;
-                }}
-                QLabel#card_title {{
-                    font-size: 15px;
-                    font-weight: 700;
-                    color: {text_color} !important;
-                }}
-                QLabel#card_details {{
-                    font-size: 12px;
-                    color: {text_tertiary} !important;
-                }}
-            """)
-            status_label = card.findChild(QtWidgets.QLabel, "card_status")
-            if status_label:
-                current_style = status_label.styleSheet() or ""
-                if not current_style or "#666666" in current_style or "color: #666666" in current_style:
-                    status_label.setStyleSheet(f"""
-                        font-size: 14px;
-                        color: {text_secondary} !important;
-                        font-weight: 600;
-                    """)
-                else:
-                    # Preserve status color but bump size
-                    status_label.setStyleSheet(
-                        current_style.replace("font-size: 12px", "font-size: 14px")
-                    )
-                # Otherwise keep the status-specific color (green/red/orange)
         
         # Update all other labels
         for label in self.findChildren(QtWidgets.QLabel):

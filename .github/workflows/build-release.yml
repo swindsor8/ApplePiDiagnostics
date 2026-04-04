@@ -1,0 +1,129 @@
+name: Build & Release Pi Image
+
+# Triggered by pushing a version tag, e.g.: git tag v0.1.0 && git push --tags
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  build:
+    name: Build flashable image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create GitHub Releases
+
+    steps:
+      # -----------------------------------------------------------------------
+      # 1. Checkout
+      # -----------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # -----------------------------------------------------------------------
+      # 2. Install host-side build dependencies
+      # -----------------------------------------------------------------------
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            kpartx \
+            qemu-user-static \
+            binfmt-support \
+            xz-utils \
+            parted \
+            e2fsprogs \
+            rsync \
+            wget
+
+      # -----------------------------------------------------------------------
+      # 3. Cache the base Pi OS image to avoid re-downloading on every run
+      # -----------------------------------------------------------------------
+      - name: Cache base Pi OS image
+        uses: actions/cache@v4
+        with:
+          path: build/base-raspios-lite-arm64.img.xz
+          key: base-raspios-lite-arm64-2024-11-19
+
+      # -----------------------------------------------------------------------
+      # 4. Build the image
+      # -----------------------------------------------------------------------
+      - name: Build apple-pi-diagnostics image
+        run: |
+          chmod +x build-image.sh
+          sudo ./build-image.sh
+
+      # -----------------------------------------------------------------------
+      # 5. Read output metadata
+      # -----------------------------------------------------------------------
+      - name: Read build metadata
+        id: meta
+        run: |
+          XZ_FILE="apple-pi-diagnostics.img.xz"
+          SHA256=$(awk '{print $1}' apple-pi-diagnostics.img.xz.sha256)
+          XZ_SIZE=$(stat -c%s "${XZ_FILE}")
+          RAW_SIZE=$(stat -c%s "apple-pi-diagnostics.img")
+          TAG="${GITHUB_REF_NAME}"
+          RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${XZ_FILE}"
+          RELEASE_DATE=$(date -u +%Y-%m-%d)
+
+          echo "sha256=${SHA256}"         >> "$GITHUB_OUTPUT"
+          echo "xz_size=${XZ_SIZE}"       >> "$GITHUB_OUTPUT"
+          echo "raw_size=${RAW_SIZE}"     >> "$GITHUB_OUTPUT"
+          echo "release_url=${RELEASE_URL}" >> "$GITHUB_OUTPUT"
+          echo "release_date=${RELEASE_DATE}" >> "$GITHUB_OUTPUT"
+
+      # -----------------------------------------------------------------------
+      # 6. Stamp os_list.json with real values
+      # -----------------------------------------------------------------------
+      - name: Stamp os_list.json
+        env:
+          RELEASE_URL: ${{ steps.meta.outputs.release_url }}
+          SHA256: ${{ steps.meta.outputs.sha256 }}
+          XZ_SIZE: ${{ steps.meta.outputs.xz_size }}
+          RAW_SIZE: ${{ steps.meta.outputs.raw_size }}
+          RELEASE_DATE: ${{ steps.meta.outputs.release_date }}
+        run: |
+          sed -i \
+            -e "s|RELEASE_URL_PLACEHOLDER|${RELEASE_URL}|g" \
+            -e "s|SHA256_PLACEHOLDER|${SHA256}|g" \
+            -e "s|\"extract_size\": 0|\"extract_size\": ${RAW_SIZE}|g" \
+            -e "s|\"image_download_size\": 0|\"image_download_size\": ${XZ_SIZE}|g" \
+            -e "s|RELEASE_DATE_PLACEHOLDER|${RELEASE_DATE}|g" \
+            os_list.json
+          echo "--- stamped os_list.json ---"
+          cat os_list.json
+
+      # -----------------------------------------------------------------------
+      # 7. Create GitHub Release and attach assets
+      # -----------------------------------------------------------------------
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "${TAG}" \
+            --title "Apple Pi Diagnostics ${TAG}" \
+            --notes "$(cat <<'EOF'
+          ## Apple Pi Diagnostics ${TAG}
+
+          ### How to flash
+          1. Open **Raspberry Pi Imager**
+          2. Click **"Choose OS"** → scroll to the bottom → **"Use custom"**
+          3. Select `apple-pi-diagnostics.img.xz` (or paste the download URL)
+          4. Flash to SD card, insert into your Pi and power on
+
+          ### Pi Imager custom URL
+          To add this image to your own Pi Imager list, point it at:
+          ```
+          https://raw.githubusercontent.com/${{ github.repository }}/releases/download/${TAG}/os_list.json
+          ```
+
+          ### Supported hardware
+          - Raspberry Pi 4 (all RAM variants)
+          - Raspberry Pi 5
+          EOF
+          )" \
+            "apple-pi-diagnostics.img.xz" \
+            "apple-pi-diagnostics.img.xz.sha256" \
+            "os_list.json"

@@ -1,0 +1,16 @@
+[Unit]
+Description=Apple Pi Diagnostics GUI
+Documentation=https://github.com/swindsor8/ApplePiDiagnostics
+After=multi-user.target
+
+[Service]
+User=pi
+WorkingDirectory=/opt/apple-pi-diagnostics/full-linux-gui
+Environment=HOME=/home/pi
+# startx manages the X server; -nocursor suppresses the default X cursor
+ExecStart=/usr/bin/startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 -nocursor
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

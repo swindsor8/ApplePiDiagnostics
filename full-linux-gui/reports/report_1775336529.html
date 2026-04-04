@@ -1,0 +1,44 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><title>Apple Pi Diagnostics Report</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+         color:#111;background:#fff;padding:2rem;max-width:860px;margin:0 auto}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:1.5rem;
+           border-bottom:2px solid #0078d4;padding-bottom:1rem}
+    .logo{width:52px;height:52px}
+    h1{font-size:1.5rem;color:#0078d4}
+    .meta{font-size:0.82rem;color:#555;margin-top:4px}
+    h2{font-size:1.1rem;font-weight:700;margin:1.5rem 0 0.75rem;color:#111}
+    .card{border:1px solid #ddd;border-radius:8px;padding:1rem;margin-bottom:0.75rem}
+    .card-header{display:flex;justify-content:space-between;align-items:baseline;
+                 margin-bottom:0.4rem}
+    .card-title{font-weight:600;font-size:1rem}
+    .badge{font-size:0.8rem;font-weight:600;padding:2px 8px;border-radius:12px}
+    .pass{color:#1a8a4a;background:#e6f5ec}
+    .fail{color:#cc2200;background:#fdecea}
+    .unsupported{color:#b06000;background:#fff3e0}
+    .other{color:#555;background:#f0f0f0}
+    .lines{font-size:0.88rem;color:#333;line-height:1.6}
+    .issues-section h2{color:#cc2200}
+    .no-issues{color:#1a8a4a;font-size:0.9rem}
+    hr{border:none;border-top:1px solid #e0e0e0;margin:1.5rem 0}
+    @media(max-width:500px){body{padding:1rem}}
+    </style>
+</head><body>
+<header><img class="logo" src="file:///mnt/data/Documents/ApplePiDi/ApplePiDiagnostics/full-linux-gui/app/assets/apple_pi_logo.png" alt="logo"><div>
+<h1>Apple Pi Diagnostics Report</h1>
+<div class="meta">Generated: Sat Apr  4 16:02:09 2026
+ &nbsp;|&nbsp; Host: Zorin-PC
+ &nbsp;|&nbsp; Zorin OS 18
+
+</div></div></header>
+<div class="issues-section">
+<h2>Highlighted Issues</h2>
+<p class="no-issues">No issues found &mdash; all tests passed.</p>
+</div>
+<hr>
+<h2>All Results</h2>
+<div class="card"><div class="card-header"><span class="card-title">CPU</span><span class="badge pass">Passed</span></div><div class="lines">CPU averaged 57.3% load during the test.<br>Used 8 worker threads.<br>Peak temperature: 48 °C.<br>Per-core load: 59%, 57%, 58%, 57%, 57%, 58%, 57%, 56%.</div></div>
+</body></html>
