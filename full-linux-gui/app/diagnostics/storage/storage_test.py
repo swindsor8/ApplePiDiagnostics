@@ -6,12 +6,18 @@ Detects and tests all storage devices attached to the system.
 from __future__ import annotations
 
 import os
+import re
 import time
 import tempfile
 import subprocess
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional, List
 import psutil
+
+
+def _safe_err(e: Exception) -> str:
+    """Return a sanitized error string that strips file paths to avoid info disclosure."""
+    return re.sub(r'/\S+', '[path]', str(e))
 
 
 def _detect_storage_devices() -> List[Dict[str, Any]]:
@@ -203,7 +209,7 @@ def _test_device_speed(device_path: str, mountpoint: Optional[str] = None,
     except Exception as e:
         return {
             "status": "FAIL",
-            "note": str(e),
+            "note": _safe_err(e),
             "tested_mb": tested_mb,
         }
     finally:
@@ -276,7 +282,7 @@ def run_storage_test(file_size_mb: int = 8, progress_callback: Optional[Callable
     except Exception as e:
         return {
             "status": "FAIL",
-            "note": str(e),
+            "note": _safe_err(e),
             "devices": [],
             "total_devices": 0,
             "tested_devices": 0,

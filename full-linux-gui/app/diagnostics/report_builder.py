@@ -127,7 +127,11 @@ def _summarize_test(test_id: str, result: Dict[str, Any]) -> List[str]:
             lines.append(f"Tested {tested:.0f} MB of RAM.")
         errors = result.get("errors", [])
         if errors:
-            lines.append(f"Errors found: {'; '.join(str(e) for e in errors[:3])}.")
+            # Strip file-path-like tokens from error strings before embedding in reports.
+            def _sanitize_err(msg: str) -> str:
+                import re
+                return re.sub(r'/\S+', '[path]', str(msg))
+            lines.append(f"Errors found: {'; '.join(_sanitize_err(e) for e in errors[:3])}.")
         else:
             lines.append("No memory errors detected.")
         tp = result.get("throughput_mb_s")

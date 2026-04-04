@@ -210,12 +210,28 @@ trap - EXIT  # Cleanup already ran; disable the trap
 # Step 11: Shrink image with PiShrink (download if not present)
 # ---------------------------------------------------------------------------
 PISHRINK="${BUILD_DIR}/pishrink.sh"
+# Pin PiShrink to a specific commit to prevent supply-chain attacks via mutable
+# 'master' branch.  Update PISHRINK_COMMIT and PISHRINK_SHA256 together whenever
+# you intentionally upgrade PiShrink:
+#   1. Pick a commit from https://github.com/Drewsif/PiShrink/commits/master
+#   2. Download it: curl -fsSL "https://raw.githubusercontent.com/Drewsif/PiShrink/<commit>/pishrink.sh" | sha256sum
+#   3. Set both variables below.
+PISHRINK_COMMIT="4a4d899c4e3e35b789f4e0a3706e2c33d001699d"
+PISHRINK_SHA256="4a4ee9a67ce634b3b7a24e63eacac4e8eacbfa38047e96af8e4a3e4b9ea8b6d6"
+PISHRINK_URL="https://raw.githubusercontent.com/Drewsif/PiShrink/${PISHRINK_COMMIT}/pishrink.sh"
+
 if [ ! -f "${PISHRINK}" ]; then
-    info "Downloading PiShrink..."
-    wget -q -O "${PISHRINK}" \
-        "https://raw.githubusercontent.com/Drewsif/PiShrink/master/pishrink.sh"
-    chmod +x "${PISHRINK}"
+    info "Downloading PiShrink (commit ${PISHRINK_COMMIT})..."
+    wget -q -O "${PISHRINK}" "${PISHRINK_URL}"
 fi
+
+info "Verifying PiShrink integrity..."
+ACTUAL_SHA256="$(sha256sum "${PISHRINK}" | awk '{print $1}')"
+if [ "${ACTUAL_SHA256}" != "${PISHRINK_SHA256}" ]; then
+    die "PiShrink checksum mismatch — expected ${PISHRINK_SHA256}, got ${ACTUAL_SHA256}. Delete ${PISHRINK} and re-run after updating PISHRINK_COMMIT and PISHRINK_SHA256."
+fi
+chmod +x "${PISHRINK}"
+
 info "Shrinking image..."
 cp "${WORK_IMG}" "${OUT_IMG}"
 bash "${PISHRINK}" "${OUT_IMG}" || info "PiShrink encountered a non-fatal issue; continuing."

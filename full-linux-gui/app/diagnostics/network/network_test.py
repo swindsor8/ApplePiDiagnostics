@@ -1,10 +1,16 @@
 """Basic network connectivity diagnostics."""
 from __future__ import annotations
 
+import re
 import socket
 import subprocess
 import time
 from typing import Dict, Any, List, Optional
+
+
+def _safe_err(e: Exception) -> str:
+    """Return a sanitized error string that strips file paths to avoid info disclosure."""
+    return re.sub(r'/\S+', '[path]', str(e))
 
 
 def _ping_host(host: str, count: int = 2, timeout: int = 2) -> Dict[str, Any]:
@@ -16,10 +22,19 @@ def _ping_host(host: str, count: int = 2, timeout: int = 2) -> Dict[str, Any]:
     except FileNotFoundError:
         return {"host": host, "ok": False, "note": "ping not available"}
     except Exception as e:
-        return {"host": host, "ok": False, "note": str(e)}
+        return {"host": host, "ok": False, "note": _safe_err(e)}
 
 
 def run_network_test(targets: Optional[List[str]] = None, dns_check: str = "www.google.com") -> Dict[str, Any]:
+    """Run basic network connectivity checks.
+
+    Privacy note: By default this function sends ICMP ping packets to
+    8.8.8.8 (Google DNS) and 1.1.1.1 (Cloudflare DNS), and performs a DNS
+    lookup for www.google.com.  These requests are visible to those third
+    parties and reveal that this device is running connectivity tests.
+    Pass custom ``targets`` and ``dns_check`` values to use local
+    infrastructure instead.
+    """
     if targets is None:
         targets = ["8.8.8.8", "1.1.1.1"]
 
@@ -34,7 +49,7 @@ def run_network_test(targets: Optional[List[str]] = None, dns_check: str = "www.
         ip = socket.gethostbyname(dns_check)
         out["dns"] = {"host": dns_check, "ip": ip, "ok": True, "latency_s": time.time() - t0}
     except Exception as e:
-        out["dns"] = {"host": dns_check, "ok": False, "note": str(e)}
+        out["dns"] = {"host": dns_check, "ok": False, "note": _safe_err(e)}
 
     # check interfaces
     try:

@@ -4,9 +4,15 @@ Uses `lsusb` if available; otherwise returns UNSUPPORTED.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from typing import Dict, Any, List
+
+
+def _safe_err(e: Exception) -> str:
+    """Return a sanitized error string that strips file paths to avoid info disclosure."""
+    return re.sub(r'/\S+', '[path]', str(e))
 
 
 def run_usb_enumeration() -> Dict[str, Any]:
@@ -18,7 +24,7 @@ def run_usb_enumeration() -> Dict[str, Any]:
         devices: List[str] = [ln.strip() for ln in out.splitlines() if ln.strip()]
         return {"status": "OK", "count": len(devices), "devices": devices}
     except Exception as e:
-        return {"status": "FAIL", "note": str(e)}
+        return {"status": "FAIL", "note": _safe_err(e)}
 
 
 def run_usb_quick_test() -> Dict[str, Any]:
@@ -72,7 +78,7 @@ def run_usb_speed_test(mount_point: str, file_size_mb: int = 16) -> Dict[str, An
 
         return {"status": "OK", "write_mb_s": write_mb_s, "read_mb_s": read_mb_s}
     except Exception as e:
-        return {"status": "FAIL", "note": str(e)}
+        return {"status": "FAIL", "note": _safe_err(e)}
 
 
 if __name__ == "__main__":
