@@ -319,6 +319,7 @@ class StatusCard(QtWidgets.QWidget):
         self.icon_key = icon_key
         self.status = "PENDING"
         self.details = ""
+        self.flat_mode = False  # Set True for overview cards (no box, bigger text)
         self._build_ui()
 
     def _build_ui(self):
@@ -401,8 +402,9 @@ class StatusCard(QtWidgets.QWidget):
             text = "○ Pending"
             
         self.status_label.setText(text)
+        font_size = "14px" if self.flat_mode else "12px"
         self.status_label.setStyleSheet(f"""
-            font-size: 12px;
+            font-size: {font_size};
             color: {color};
             font-weight: 600;
         """)
@@ -587,6 +589,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for title, icon, test_id in tests:
             # Create separate cards for overview (read-only status display)
             card = StatusCard(title, icon)
+            card.flat_mode = True
             card.test_btn.hide()
             self.overview_cards[test_id] = card
             # Update status from test results if available
@@ -1636,9 +1639,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 }}
             """)
         
-        # Update status cards (testing page + overview page)
-        all_cards = list(self.test_cards.values()) + list(self.overview_cards.values())
-        for card in all_cards:
+        # Update status cards — Testing page gets the white box, Overview gets flat text
+        for card in self.test_cards.values():
             card.set_icon_color("#555555")
             card.setStyleSheet(f"""
                 StatusCard {{
@@ -1660,17 +1662,47 @@ class MainWindow(QtWidgets.QMainWindow):
                     color: {text_tertiary} !important;
                 }}
             """)
-            # Update status label (preserve its dynamic color)
             status_label = card.findChild(QtWidgets.QLabel, "card_status")
             if status_label:
                 current_style = status_label.styleSheet() or ""
-                # Only update if it's the default pending state
                 if "#666666" in current_style or "color: #666666" in current_style:
                     status_label.setStyleSheet(f"""
                         font-size: 12px;
                         color: {text_secondary} !important;
                         font-weight: 500;
                     """)
+
+        for card in self.overview_cards.values():
+            card.set_icon_color("#555555")
+            card.setStyleSheet(f"""
+                StatusCard {{
+                    background-color: transparent;
+                    border: none;
+                }}
+                QLabel#card_title {{
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: {text_color} !important;
+                }}
+                QLabel#card_details {{
+                    font-size: 12px;
+                    color: {text_tertiary} !important;
+                }}
+            """)
+            status_label = card.findChild(QtWidgets.QLabel, "card_status")
+            if status_label:
+                current_style = status_label.styleSheet() or ""
+                if not current_style or "#666666" in current_style or "color: #666666" in current_style:
+                    status_label.setStyleSheet(f"""
+                        font-size: 14px;
+                        color: {text_secondary} !important;
+                        font-weight: 600;
+                    """)
+                else:
+                    # Preserve status color but bump size
+                    status_label.setStyleSheet(
+                        current_style.replace("font-size: 12px", "font-size: 14px")
+                    )
                 # Otherwise keep the status-specific color (green/red/orange)
         
         # Update all other labels
