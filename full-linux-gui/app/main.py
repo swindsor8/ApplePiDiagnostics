@@ -168,10 +168,37 @@ def _make_svg_pixmap(icon_key, size=20, color="#888888"):
         return None
 
 
+class LogoBackgroundPage(QtWidgets.QWidget):
+    """Tab page widget that paints the Apple Pi logo as a 50% opacity watermark."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._logo_pixmap = None
+        if LOGO_PATH and LOGO_PATH.exists():
+            self._logo_pixmap = QtGui.QPixmap(str(LOGO_PATH))
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if not self._logo_pixmap or self._logo_pixmap.isNull():
+            return
+        painter = QtGui.QPainter(self)
+        painter.setOpacity(0.5)
+        logo_size = min(self.width(), self.height()) // 2
+        scaled = self._logo_pixmap.scaled(
+            logo_size, logo_size,
+            QtCore.Qt.KeepAspectRatio,
+            QtCore.Qt.SmoothTransformation,
+        )
+        x = (self.width() - scaled.width()) // 2
+        y = (self.height() - scaled.height()) // 2
+        painter.drawPixmap(x, y, scaled)
+        painter.end()
+
+
 class StartupBanner(QtWidgets.QWidget):
     """Dismissible banner shown after launch summarising pre-boot check results."""
 
-    AUTO_DISMISS_MS = 8000
+    AUTO_DISMISS_MS = 30000
 
     def __init__(self, results, parent=None):
         super().__init__(parent)
@@ -523,7 +550,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _create_overview_page(self):
         """Create Overview page with system information"""
-        page = QtWidgets.QWidget()
+        page = LogoBackgroundPage()
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
@@ -589,7 +616,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _create_testing_page(self):
         """Create Testing page with test controls"""
-        page = QtWidgets.QWidget()
+        page = LogoBackgroundPage()
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
@@ -654,7 +681,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _create_results_page(self):
         """Create Results page showing test results"""
-        page = QtWidgets.QWidget()
+        page = LogoBackgroundPage()
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(20)
@@ -708,7 +735,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _create_settings_page(self):
         """Create Settings page with theme, font size, and network options"""
-        page = QtWidgets.QWidget()
+        page = LogoBackgroundPage()
         layout = QtWidgets.QVBoxLayout(page)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(24)
