@@ -1,0 +1,13 @@
+# Dependabot version updates for Apple Pi Diagnostics
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/" # Location of requirements.txt / pyproject.toml / setup.py
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "python"
