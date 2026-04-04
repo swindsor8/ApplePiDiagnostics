@@ -1,0 +1,1704 @@
+<!doctype html>
+<html><head>
+<title>Apple Pi Diagnostics Report</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+    body{font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial; padding:1rem;}
+    header{display:flex;align-items:center;gap:10px}
+    img.logo{width:48px;height:48px}
+    .meta{font-size:0.9rem;color:#444}
+    .card{border:1px solid #eee;padding:0.75rem;margin:0.5rem 0;border-radius:8px}
+    pre.json{white-space:pre-wrap;word-break:break-word;background:#f8f8f8;padding:0.5rem;border-radius:6px}
+    @media (max-width:420px){body{padding:0.5rem}}</style>
+</head><body>
+<header><div><img class="logo" src="file:///mnt/data/Documents/ApplePiDi/ApplePiDiagnostics/full-linux-gui/app/assets/apple_pi_logo.png" alt="logo"></div><div><h1>Apple Pi Diagnostics Report</h1><div class="meta">Generated: Fri Apr  3 23:44:49 2026</div></div></header>
+<section class="card"><h2>Summary</h2>
+<div><strong>usb:</strong> <em>OK</em> </div>
+<div style="margin-left:12px;">
+<div><small>count: 4</small></div>
+<div><small>devices: ['Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub', 'Bus 001 Device 002: ID 8087:0a2a Intel Corp. Bluetooth wireless interface', 'Bus 001 Device 003: ID 13d3:56b2 IMC Networks Integrated Camera', 'Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub']</small></div>
+</div>
+<div><strong>hdmi:</strong> <em>OK</em> </div>
+<div style="margin-left:12px;">
+<div><small>count: 1</small></div>
+<div><small>displays: [{'line': 'eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 340mm x 190mm', 'name': 'eDP-1', 'resolution': '1920x1080+0+0'}]</small></div>
+</div>
+<div><strong>gpio:</strong> <em>UNSUPPORTED</em> No Raspberry Pi GPIO libraries available</div>
+<div><strong>network:</strong> <em>OK</em> </div>
+<div style="margin-left:12px;">
+<div><small>ping: [{'host': '8.8.8.8', 'ok': True, 'rc': 0, 'stdout_first': 'PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data.'}, {'host': '1.1.1.1', 'ok': True, 'rc': 0, 'stdout_first': 'PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data.'}]</small></div>
+<div><small>dns: {'host': 'www.google.com', 'ip': '142.251.150.119', 'ok': True, 'latency_s': 0.010712146759033203}</small></div>
+<div><small>interfaces: [{'name': 'wlp1s0', 'up': True, 'addrs': ['192.168.1.20', '2605:59ca:5610:d400:d52:350b:e9a:906f', '2605:59ca:5610:d400:ab63:5bf8:7953:3f6d', 'fe80::288a:c6a0:5314:df68%wlp1s0', '30:24:32:f2:ba:7f']}, {'name': 'tailscale0', 'up': True, 'addrs': ['100.123.91.44', 'fd7a:115c:a1e0::f034:5b2c', 'fe80::3b90:510a:e2c4:51fb%tailscale0']}]</small></div>
+<div><small>local_ip: 192.168.1.20</small></div>
+</div>
+<div><strong>sd:</strong> <em>WARNING</em> </div>
+<div style="margin-left:12px;">
+<div><small>devices: [{'device': 'sysfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys', 'fstype': 'sysfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 47.70822065443336, 'read_mb_s': 329.76680556647534, 'test_location': 'mounted'}, {'device': 'proc', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/proc', 'fstype': 'proc', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 61.311718401683976, 'read_mb_s': 96.56451844987654, 'test_location': 'mounted'}, {'device': 'udev', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/dev', 'fstype': 'devtmpfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 46.765498171438765, 'read_mb_s': 148.14057146893654, 'test_location': 'mounted'}, {'device': 'devpts', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/dev/pts', 'fstype': 'devpts', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 47.98727754291827, 'read_mb_s': 86.01142224364035, 'test_location': 'mounted'}, {'device': 'tmpfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/run', 'fstype': 'tmpfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 41.60200754316491, 'read_mb_s': 109.19183333441806, 'test_location': 'mounted'}, {'device': '/dev/nvme0n1p', 'type': 'NVMe SSD', 'size_gb': 0, 'mountpoint': '/', 'fstype': 'ext4', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 50.86856571108046, 'read_mb_s': 186.45287338438115, 'test_location': 'mounted'}, {'device': 'securityfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/kernel/security', 'fstype': 'securityfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 44.399791461016704, 'read_mb_s': 63.39541421683469, 'test_location': 'mounted'}, {'device': 'cgroup', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/fs/cgroup', 'fstype': 'cgroup2', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 33.5471858078655, 'read_mb_s': 77.2887152649812, 'test_location': 'mounted'}, {'device': 'efivarfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/firmware/efi/efivars', 'fstype': 'efivarfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 24.839899676346654, 'read_mb_s': 96.38422207668356, 'test_location': 'mounted'}, {'device': 'bpf', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/fs/bpf', 'fstype': 'bpf', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 40.13592019329681, 'read_mb_s': 96.38145354481792, 'test_location': 'mounted'}, {'device': 'systemd-', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/proc/sys/fs/binfmt_misc', 'fstype': 'autofs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 44.05087433702673, 'read_mb_s': 186.3037988739964, 'test_location': 'mounted'}, {'device': 'mqueue', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/dev/mqueue', 'fstype': 'mqueue', 'status': 'FAIL', 'note': '[Errno 22] Invalid argument', 'tested_mb': 4.0}, {'device': 'hugetlbfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/dev/hugepages', 'fstype': 'hugetlbfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 41.05813455500329, 'read_mb_s': 250.82924933096118, 'test_location': 'mounted'}, {'device': 'debugfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/kernel/debug', 'fstype': 'debugfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 41.65158304762425, 'read_mb_s': 664.0759974667511, 'test_location': 'mounted'}, {'device': 'tracefs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/kernel/tracing', 'fstype': 'tracefs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 21.273146627748183, 'read_mb_s': 96.18694782224821, 'test_location': 'mounted'}, {'device': 'fusectl', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/fs/fuse/connections', 'fstype': 'fusectl', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 36.1627031256399, 'read_mb_s': 76.9261835438685, 'test_location': 'mounted'}, {'device': 'configfs', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/sys/kernel/config', 'fstype': 'configfs', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 36.27796385873032, 'read_mb_s': 109.74538508837342, 'test_location': 'mounted'}, {'device': '/dev/sda', 'type': 'Hard Drive', 'size_gb': 0, 'mountpoint': '/mnt/data', 'fstype': 'ext4', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 6.358963551937816, 'read_mb_s': 86.40744937269525, 'test_location': 'mounted'}, {'device': 'binfmt_misc', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/proc/sys/fs/binfmt_misc', 'fstype': 'binfmt_misc', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 45.78784537624313, 'read_mb_s': 128.40656068943875, 'test_location': 'mounted'}, {'device': 'gvfsd-fuse', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/run/user/1000/gvfs', 'fstype': 'fuse.gvfsd-fuse', 'status': 'FAIL', 'note': "[Errno 2] No such file or directory: '/run/user/1000/gvfs/tmpbfww6jd_.apd_test'", 'tested_mb': 4.0}, {'device': 'portal', 'type': 'Unknown', 'size_gb': 0, 'mountpoint': '/run/user/1000/doc', 'fstype': 'fuse.portal', 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 56.12441750382198, 'read_mb_s': 107.55935658830242, 'test_location': 'mounted'}, {'device': '/dev/nvme0n', 'type': 'NVMe SSD', 'size_gb': 0, 'mountpoint': None, 'fstype': None, 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 50.15895073262757, 'read_mb_s': 109.76620759593052, 'test_location': 'fallback'}, {'device': '/dev/sda', 'type': 'USB Drive', 'size_gb': 0, 'mountpoint': None, 'fstype': None, 'status': 'OK', 'tested_mb': 4.0, 'write_mb_s': 43.931258952021096, 'read_mb_s': 125.89458518429583, 'test_location': 'fallback'}]</small></div>
+<div><small>total_devices: 23</small></div>
+<div><small>tested_devices: 21</small></div>
+</div>
+<div><strong>cpu:</strong> <em>OK</em> </div>
+<div style="margin-left:12px;">
+<div><small>duration: 5</small></div>
+<div><small>workers: 8</small></div>
+<div><small>avg_cpu_percent: 70.58333333333333</small></div>
+<div><small>per_cpu_percent: [68.60000000000001, 67.06666666666666, 69.83333333333333, 70.63333333333333, 79.73333333333333, 72.4, 67.56666666666666, 68.83333333333333]</small></div>
+<div><small>samples_count: 3</small></div>
+<div><small>max_temperature: 70.0</small></div>
+<div><small>samples: [{'percpu': [74.7, 72.8, 72.8, 77.6, 75.9, 74.4, 72.2, 72.6], 'avg': 74.125, 'ts': 1775277873.9936228, 'temps': {'acpitz': [0.0, 0.0, 10.0], 'nvme': [38.85], 'pch_skylake': [46.0], 'iwlwifi_1': [39.0], 'coretemp': [68.0, 65.0, 68.0, 67.0, 69.0]}, 'max_temp': 69.0}, {'percpu': [75.3, 72.8, 77.4, 77.6, 76.5, 83.9, 75.3, 75.0], 'avg': 76.725, 'ts': 1775277876.1358156, 'temps': {'acpitz': [0.0, 0.0, 10.0], 'nvme': [38.85], 'pch_skylake': [48.0], 'iwlwifi_1': [39.0], 'coretemp': [72.0, 67.0, 70.0, 73.0, 71.0]}, 'max_temp': 73.0}, {'percpu': [55.8, 55.6, 59.3, 56.7, 86.8, 58.9, 55.2, 58.9], 'avg': 60.9, 'ts': 1775277878.9609044, 'temps': {'acpitz': [0.0, 0.0, 10.0], 'nvme': [38.85], 'pch_skylake': [50.0], 'iwlwifi_1': [39.0], 'coretemp': [69.0, 69.0, 56.0, 57.0, 57.0]}, 'max_temp': 69.0}]</small></div>
+</div>
+<div><strong>ram:</strong> <em>OK</em> </div>
+<div style="margin-left:12px;">
+<div><small>tested_mb: 64.0</small></div>
+<div><small>errors: []</small></div>
+<div><small>throughput_mb_s: 6.131804458827459</small></div>
+<div><small>samples: [{'pass': 1, 'tested_mb': 16.0, 'chunk_mb': 16.0, 'write_time_s': 5.062796354293823, 'read_time_s': 0.0015254020690917969, 'timestamp': 1775277877.1974049}, {'pass': 1, 'tested_mb': 32.0, 'chunk_mb': 16.0, 'write_time_s': 1.7950623035430908, 'read_time_s': 0.0015697479248046875, 'timestamp': 1775277878.9962}, {'pass': 1, 'tested_mb': 48.0, 'chunk_mb': 16.0, 'write_time_s': 1.7787697315216064, 'read_time_s': 0.0015265941619873047, 'timestamp': 1775277880.7765071}, {'pass': 1, 'tested_mb': 64.0, 'chunk_mb': 16.0, 'write_time_s': 1.7922537326812744, 'read_time_s': 0.0015265941619873047, 'timestamp': 1775277882.5702972}]</small></div>
+</div>
+</section>
+<section class="card"><h2>Details</h2>
+<h3>usb</h3>
+<pre class="json">{
+  "status": "OK",
+  "count": 4,
+  "devices": [
+    "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub",
+    "Bus 001 Device 002: ID 8087:0a2a Intel Corp. Bluetooth wireless interface",
+    "Bus 001 Device 003: ID 13d3:56b2 IMC Networks Integrated Camera",
+    "Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub"
+  ],
+  "timestamp": "2026-04-03 23:44:32"
+}</pre>
+<h3>hdmi</h3>
+<pre class="json">{
+  "status": "OK",
+  "count": 1,
+  "displays": [
+    {
+      "line": "eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 340mm x 190mm",
+      "name": "eDP-1",
+      "resolution": "1920x1080+0+0"
+    }
+  ],
+  "timestamp": "2026-04-03 23:44:33"
+}</pre>
+<h3>gpio</h3>
+<pre class="json">{
+  "status": "UNSUPPORTED",
+  "note": "No Raspberry Pi GPIO libraries available",
+  "timestamp": "2026-04-03 23:44:33"
+}</pre>
+<h3>network</h3>
+<pre class="json">{
+  "status": "OK",
+  "ping": [
+    {
+      "host": "8.8.8.8",
+      "ok": true,
+      "rc": 0,
+      "stdout_first": "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data."
+    },
+    {
+      "host": "1.1.1.1",
+      "ok": true,
+      "rc": 0,
+      "stdout_first": "PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data."
+    }
+  ],
+  "dns": {
+    "host": "www.google.com",
+    "ip": "142.251.150.119",
+    "ok": true,
+    "latency_s": 0.010712146759033203
+  },
+  "interfaces": [
+    {
+      "name": "wlp1s0",
+      "up": true,
+      "addrs": [
+        "192.168.1.20",
+        "2605:59ca:5610:d400:d52:350b:e9a:906f",
+        "2605:59ca:5610:d400:ab63:5bf8:7953:3f6d",
+        "fe80::288a:c6a0:5314:df68%wlp1s0",
+        "30:24:32:f2:ba:7f"
+      ]
+    },
+    {
+      "name": "tailscale0",
+      "up": true,
+      "addrs": [
+        "100.123.91.44",
+        "fd7a:115c:a1e0::f034:5b2c",
+        "fe80::3b90:510a:e2c4:51fb%tailscale0"
+      ]
+    }
+  ],
+  "local_ip": "192.168.1.20",
+  "timestamp": "2026-04-03 23:44:34"
+}</pre>
+<h3>sd</h3>
+<pre class="json">{
+  "status": "WARNING",
+  "devices": [
+    {
+      "device": "sysfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys",
+      "fstype": "sysfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 47.70822065443336,
+      "read_mb_s": 329.76680556647534,
+      "test_location": "mounted"
+    },
+    {
+      "device": "proc",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/proc",
+      "fstype": "proc",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 61.311718401683976,
+      "read_mb_s": 96.56451844987654,
+      "test_location": "mounted"
+    },
+    {
+      "device": "udev",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/dev",
+      "fstype": "devtmpfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 46.765498171438765,
+      "read_mb_s": 148.14057146893654,
+      "test_location": "mounted"
+    },
+    {
+      "device": "devpts",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/dev/pts",
+      "fstype": "devpts",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 47.98727754291827,
+      "read_mb_s": 86.01142224364035,
+      "test_location": "mounted"
+    },
+    {
+      "device": "tmpfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/run",
+      "fstype": "tmpfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 41.60200754316491,
+      "read_mb_s": 109.19183333441806,
+      "test_location": "mounted"
+    },
+    {
+      "device": "/dev/nvme0n1p",
+      "type": "NVMe SSD",
+      "size_gb": 0,
+      "mountpoint": "/",
+      "fstype": "ext4",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 50.86856571108046,
+      "read_mb_s": 186.45287338438115,
+      "test_location": "mounted"
+    },
+    {
+      "device": "securityfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/kernel/security",
+      "fstype": "securityfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 44.399791461016704,
+      "read_mb_s": 63.39541421683469,
+      "test_location": "mounted"
+    },
+    {
+      "device": "cgroup",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/fs/cgroup",
+      "fstype": "cgroup2",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 33.5471858078655,
+      "read_mb_s": 77.2887152649812,
+      "test_location": "mounted"
+    },
+    {
+      "device": "efivarfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/firmware/efi/efivars",
+      "fstype": "efivarfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 24.839899676346654,
+      "read_mb_s": 96.38422207668356,
+      "test_location": "mounted"
+    },
+    {
+      "device": "bpf",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/fs/bpf",
+      "fstype": "bpf",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 40.13592019329681,
+      "read_mb_s": 96.38145354481792,
+      "test_location": "mounted"
+    },
+    {
+      "device": "systemd-",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/proc/sys/fs/binfmt_misc",
+      "fstype": "autofs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 44.05087433702673,
+      "read_mb_s": 186.3037988739964,
+      "test_location": "mounted"
+    },
+    {
+      "device": "mqueue",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/dev/mqueue",
+      "fstype": "mqueue",
+      "status": "FAIL",
+      "note": "[Errno 22] Invalid argument",
+      "tested_mb": 4.0
+    },
+    {
+      "device": "hugetlbfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/dev/hugepages",
+      "fstype": "hugetlbfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 41.05813455500329,
+      "read_mb_s": 250.82924933096118,
+      "test_location": "mounted"
+    },
+    {
+      "device": "debugfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/kernel/debug",
+      "fstype": "debugfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 41.65158304762425,
+      "read_mb_s": 664.0759974667511,
+      "test_location": "mounted"
+    },
+    {
+      "device": "tracefs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/kernel/tracing",
+      "fstype": "tracefs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 21.273146627748183,
+      "read_mb_s": 96.18694782224821,
+      "test_location": "mounted"
+    },
+    {
+      "device": "fusectl",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/fs/fuse/connections",
+      "fstype": "fusectl",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 36.1627031256399,
+      "read_mb_s": 76.9261835438685,
+      "test_location": "mounted"
+    },
+    {
+      "device": "configfs",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/sys/kernel/config",
+      "fstype": "configfs",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 36.27796385873032,
+      "read_mb_s": 109.74538508837342,
+      "test_location": "mounted"
+    },
+    {
+      "device": "/dev/sda",
+      "type": "Hard Drive",
+      "size_gb": 0,
+      "mountpoint": "/mnt/data",
+      "fstype": "ext4",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 6.358963551937816,
+      "read_mb_s": 86.40744937269525,
+      "test_location": "mounted"
+    },
+    {
+      "device": "binfmt_misc",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/proc/sys/fs/binfmt_misc",
+      "fstype": "binfmt_misc",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 45.78784537624313,
+      "read_mb_s": 128.40656068943875,
+      "test_location": "mounted"
+    },
+    {
+      "device": "gvfsd-fuse",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/run/user/1000/gvfs",
+      "fstype": "fuse.gvfsd-fuse",
+      "status": "FAIL",
+      "note": "[Errno 2] No such file or directory: '/run/user/1000/gvfs/tmpbfww6jd_.apd_test'",
+      "tested_mb": 4.0
+    },
+    {
+      "device": "portal",
+      "type": "Unknown",
+      "size_gb": 0,
+      "mountpoint": "/run/user/1000/doc",
+      "fstype": "fuse.portal",
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 56.12441750382198,
+      "read_mb_s": 107.55935658830242,
+      "test_location": "mounted"
+    },
+    {
+      "device": "/dev/nvme0n",
+      "type": "NVMe SSD",
+      "size_gb": 0,
+      "mountpoint": null,
+      "fstype": null,
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 50.15895073262757,
+      "read_mb_s": 109.76620759593052,
+      "test_location": "fallback"
+    },
+    {
+      "device": "/dev/sda",
+      "type": "USB Drive",
+      "size_gb": 0,
+      "mountpoint": null,
+      "fstype": null,
+      "status": "OK",
+      "tested_mb": 4.0,
+      "write_mb_s": 43.931258952021096,
+      "read_mb_s": 125.89458518429583,
+      "test_location": "fallback"
+    }
+  ],
+  "total_devices": 23,
+  "tested_devices": 21,
+  "timestamp": "2026-04-03 23:44:36"
+}</pre>
+<h3>cpu</h3>
+<pre class="json">{
+  "status": "OK",
+  "duration": 5,
+  "workers": 8,
+  "avg_cpu_percent": 70.58333333333333,
+  "per_cpu_percent": [
+    68.60000000000001,
+    67.06666666666666,
+    69.83333333333333,
+    70.63333333333333,
+    79.73333333333333,
+    72.4,
+    67.56666666666666,
+    68.83333333333333
+  ],
+  "samples_count": 3,
+  "max_temperature": 70.0,
+  "samples": [
+    {
+      "percpu": [
+        74.7,
+        72.8,
+        72.8,
+        77.6,
+        75.9,
+        74.4,
+        72.2,
+        72.6
+      ],
+      "avg": 74.125,
+      "ts": 1775277873.9936228,
+      "temps": {
+        "acpitz": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "nvme": [
+          38.85
+        ],
+        "pch_skylake": [
+          46.0
+        ],
+        "iwlwifi_1": [
+          39.0
+        ],
+        "coretemp": [
+          68.0,
+          65.0,
+          68.0,
+          67.0,
+          69.0
+        ]
+      },
+      "max_temp": 69.0
+    },
+    {
+      "percpu": [
+        75.3,
+        72.8,
+        77.4,
+        77.6,
+        76.5,
+        83.9,
+        75.3,
+        75.0
+      ],
+      "avg": 76.725,
+      "ts": 1775277876.1358156,
+      "temps": {
+        "acpitz": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "nvme": [
+          38.85
+        ],
+        "pch_skylake": [
+          48.0
+        ],
+        "iwlwifi_1": [
+          39.0
+        ],
+        "coretemp": [
+          72.0,
+          67.0,
+          70.0,
+          73.0,
+          71.0
+        ]
+      },
+      "max_temp": 73.0
+    },
+    {
+      "percpu": [
+        55.8,
+        55.6,
+        59.3,
+        56.7,
+        86.8,
+        58.9,
+        55.2,
+        58.9
+      ],
+      "avg": 60.9,
+      "ts": 1775277878.9609044,
+      "temps": {
+        "acpitz": [
+          0.0,
+          0.0,
+          10.0
+        ],
+        "nvme": [
+          38.85
+        ],
+        "pch_skylake": [
+          50.0
+        ],
+        "iwlwifi_1": [
+          39.0
+        ],
+        "coretemp": [
+          69.0,
+          69.0,
+          56.0,
+          57.0,
+          57.0
+        ]
+      },
+      "max_temp": 69.0
+    }
+  ],
+  "timestamp": "2026-04-03 23:44:40"
+}</pre>
+<h3>ram</h3>
+<pre class="json">{
+  "status": "OK",
+  "tested_mb": 64.0,
+  "errors": [],
+  "throughput_mb_s": 6.131804458827459,
+  "samples": [
+    {
+      "pass": 1,
+      "tested_mb": 16.0,
+      "chunk_mb": 16.0,
+      "write_time_s": 5.062796354293823,
+      "read_time_s": 0.0015254020690917969,
+      "timestamp": 1775277877.1974049
+    },
+    {
+      "pass": 1,
+      "tested_mb": 32.0,
+      "chunk_mb": 16.0,
+      "write_time_s": 1.7950623035430908,
+      "read_time_s": 0.0015697479248046875,
+      "timestamp": 1775277878.9962
+    },
+    {
+      "pass": 1,
+      "tested_mb": 48.0,
+      "chunk_mb": 16.0,
+      "write_time_s": 1.7787697315216064,
+      "read_time_s": 0.0015265941619873047,
+      "timestamp": 1775277880.7765071
+    },
+    {
+      "pass": 1,
+      "tested_mb": 64.0,
+      "chunk_mb": 16.0,
+      "write_time_s": 1.7922537326812744,
+      "read_time_s": 0.0015265941619873047,
+      "timestamp": 1775277882.5702972
+    }
+  ],
+  "timestamp": "2026-04-03 23:44:42"
+}</pre>
+</section>
+<section class="card"><h2>Full JSON</h2>
+<pre class="json">{
+  "title": "Apple Pi Diagnostics Report",
+  "summary": {
+    "usb": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "count": 4,
+        "devices": [
+          "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub",
+          "Bus 001 Device 002: ID 8087:0a2a Intel Corp. Bluetooth wireless interface",
+          "Bus 001 Device 003: ID 13d3:56b2 IMC Networks Integrated Camera",
+          "Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub"
+        ]
+      }
+    },
+    "hdmi": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "count": 1,
+        "displays": [
+          {
+            "line": "eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 340mm x 190mm",
+            "name": "eDP-1",
+            "resolution": "1920x1080+0+0"
+          }
+        ]
+      }
+    },
+    "gpio": {
+      "status": "UNSUPPORTED",
+      "message": "No Raspberry Pi GPIO libraries available",
+      "metrics": {}
+    },
+    "network": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "ping": [
+          {
+            "host": "8.8.8.8",
+            "ok": true,
+            "rc": 0,
+            "stdout_first": "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data."
+          },
+          {
+            "host": "1.1.1.1",
+            "ok": true,
+            "rc": 0,
+            "stdout_first": "PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data."
+          }
+        ],
+        "dns": {
+          "host": "www.google.com",
+          "ip": "142.251.150.119",
+          "ok": true,
+          "latency_s": 0.010712146759033203
+        },
+        "interfaces": [
+          {
+            "name": "wlp1s0",
+            "up": true,
+            "addrs": [
+              "192.168.1.20",
+              "2605:59ca:5610:d400:d52:350b:e9a:906f",
+              "2605:59ca:5610:d400:ab63:5bf8:7953:3f6d",
+              "fe80::288a:c6a0:5314:df68%wlp1s0",
+              "30:24:32:f2:ba:7f"
+            ]
+          },
+          {
+            "name": "tailscale0",
+            "up": true,
+            "addrs": [
+              "100.123.91.44",
+              "fd7a:115c:a1e0::f034:5b2c",
+              "fe80::3b90:510a:e2c4:51fb%tailscale0"
+            ]
+          }
+        ],
+        "local_ip": "192.168.1.20"
+      }
+    },
+    "sd": {
+      "status": "WARNING",
+      "message": "",
+      "metrics": {
+        "devices": [
+          {
+            "device": "sysfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys",
+            "fstype": "sysfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 47.70822065443336,
+            "read_mb_s": 329.76680556647534,
+            "test_location": "mounted"
+          },
+          {
+            "device": "proc",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/proc",
+            "fstype": "proc",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 61.311718401683976,
+            "read_mb_s": 96.56451844987654,
+            "test_location": "mounted"
+          },
+          {
+            "device": "udev",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/dev",
+            "fstype": "devtmpfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 46.765498171438765,
+            "read_mb_s": 148.14057146893654,
+            "test_location": "mounted"
+          },
+          {
+            "device": "devpts",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/dev/pts",
+            "fstype": "devpts",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 47.98727754291827,
+            "read_mb_s": 86.01142224364035,
+            "test_location": "mounted"
+          },
+          {
+            "device": "tmpfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/run",
+            "fstype": "tmpfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 41.60200754316491,
+            "read_mb_s": 109.19183333441806,
+            "test_location": "mounted"
+          },
+          {
+            "device": "/dev/nvme0n1p",
+            "type": "NVMe SSD",
+            "size_gb": 0,
+            "mountpoint": "/",
+            "fstype": "ext4",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 50.86856571108046,
+            "read_mb_s": 186.45287338438115,
+            "test_location": "mounted"
+          },
+          {
+            "device": "securityfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/kernel/security",
+            "fstype": "securityfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 44.399791461016704,
+            "read_mb_s": 63.39541421683469,
+            "test_location": "mounted"
+          },
+          {
+            "device": "cgroup",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/fs/cgroup",
+            "fstype": "cgroup2",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 33.5471858078655,
+            "read_mb_s": 77.2887152649812,
+            "test_location": "mounted"
+          },
+          {
+            "device": "efivarfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/firmware/efi/efivars",
+            "fstype": "efivarfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 24.839899676346654,
+            "read_mb_s": 96.38422207668356,
+            "test_location": "mounted"
+          },
+          {
+            "device": "bpf",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/fs/bpf",
+            "fstype": "bpf",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 40.13592019329681,
+            "read_mb_s": 96.38145354481792,
+            "test_location": "mounted"
+          },
+          {
+            "device": "systemd-",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/proc/sys/fs/binfmt_misc",
+            "fstype": "autofs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 44.05087433702673,
+            "read_mb_s": 186.3037988739964,
+            "test_location": "mounted"
+          },
+          {
+            "device": "mqueue",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/dev/mqueue",
+            "fstype": "mqueue",
+            "status": "FAIL",
+            "note": "[Errno 22] Invalid argument",
+            "tested_mb": 4.0
+          },
+          {
+            "device": "hugetlbfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/dev/hugepages",
+            "fstype": "hugetlbfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 41.05813455500329,
+            "read_mb_s": 250.82924933096118,
+            "test_location": "mounted"
+          },
+          {
+            "device": "debugfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/kernel/debug",
+            "fstype": "debugfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 41.65158304762425,
+            "read_mb_s": 664.0759974667511,
+            "test_location": "mounted"
+          },
+          {
+            "device": "tracefs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/kernel/tracing",
+            "fstype": "tracefs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 21.273146627748183,
+            "read_mb_s": 96.18694782224821,
+            "test_location": "mounted"
+          },
+          {
+            "device": "fusectl",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/fs/fuse/connections",
+            "fstype": "fusectl",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 36.1627031256399,
+            "read_mb_s": 76.9261835438685,
+            "test_location": "mounted"
+          },
+          {
+            "device": "configfs",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/sys/kernel/config",
+            "fstype": "configfs",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 36.27796385873032,
+            "read_mb_s": 109.74538508837342,
+            "test_location": "mounted"
+          },
+          {
+            "device": "/dev/sda",
+            "type": "Hard Drive",
+            "size_gb": 0,
+            "mountpoint": "/mnt/data",
+            "fstype": "ext4",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 6.358963551937816,
+            "read_mb_s": 86.40744937269525,
+            "test_location": "mounted"
+          },
+          {
+            "device": "binfmt_misc",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/proc/sys/fs/binfmt_misc",
+            "fstype": "binfmt_misc",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 45.78784537624313,
+            "read_mb_s": 128.40656068943875,
+            "test_location": "mounted"
+          },
+          {
+            "device": "gvfsd-fuse",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/run/user/1000/gvfs",
+            "fstype": "fuse.gvfsd-fuse",
+            "status": "FAIL",
+            "note": "[Errno 2] No such file or directory: '/run/user/1000/gvfs/tmpbfww6jd_.apd_test'",
+            "tested_mb": 4.0
+          },
+          {
+            "device": "portal",
+            "type": "Unknown",
+            "size_gb": 0,
+            "mountpoint": "/run/user/1000/doc",
+            "fstype": "fuse.portal",
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 56.12441750382198,
+            "read_mb_s": 107.55935658830242,
+            "test_location": "mounted"
+          },
+          {
+            "device": "/dev/nvme0n",
+            "type": "NVMe SSD",
+            "size_gb": 0,
+            "mountpoint": null,
+            "fstype": null,
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 50.15895073262757,
+            "read_mb_s": 109.76620759593052,
+            "test_location": "fallback"
+          },
+          {
+            "device": "/dev/sda",
+            "type": "USB Drive",
+            "size_gb": 0,
+            "mountpoint": null,
+            "fstype": null,
+            "status": "OK",
+            "tested_mb": 4.0,
+            "write_mb_s": 43.931258952021096,
+            "read_mb_s": 125.89458518429583,
+            "test_location": "fallback"
+          }
+        ],
+        "total_devices": 23,
+        "tested_devices": 21
+      }
+    },
+    "cpu": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "duration": 5,
+        "workers": 8,
+        "avg_cpu_percent": 70.58333333333333,
+        "per_cpu_percent": [
+          68.60000000000001,
+          67.06666666666666,
+          69.83333333333333,
+          70.63333333333333,
+          79.73333333333333,
+          72.4,
+          67.56666666666666,
+          68.83333333333333
+        ],
+        "samples_count": 3,
+        "max_temperature": 70.0,
+        "samples": [
+          {
+            "percpu": [
+              74.7,
+              72.8,
+              72.8,
+              77.6,
+              75.9,
+              74.4,
+              72.2,
+              72.6
+            ],
+            "avg": 74.125,
+            "ts": 1775277873.9936228,
+            "temps": {
+              "acpitz": [
+                0.0,
+                0.0,
+                10.0
+              ],
+              "nvme": [
+                38.85
+              ],
+              "pch_skylake": [
+                46.0
+              ],
+              "iwlwifi_1": [
+                39.0
+              ],
+              "coretemp": [
+                68.0,
+                65.0,
+                68.0,
+                67.0,
+                69.0
+              ]
+            },
+            "max_temp": 69.0
+          },
+          {
+            "percpu": [
+              75.3,
+              72.8,
+              77.4,
+              77.6,
+              76.5,
+              83.9,
+              75.3,
+              75.0
+            ],
+            "avg": 76.725,
+            "ts": 1775277876.1358156,
+            "temps": {
+              "acpitz": [
+                0.0,
+                0.0,
+                10.0
+              ],
+              "nvme": [
+                38.85
+              ],
+              "pch_skylake": [
+                48.0
+              ],
+              "iwlwifi_1": [
+                39.0
+              ],
+              "coretemp": [
+                72.0,
+                67.0,
+                70.0,
+                73.0,
+                71.0
+              ]
+            },
+            "max_temp": 73.0
+          },
+          {
+            "percpu": [
+              55.8,
+              55.6,
+              59.3,
+              56.7,
+              86.8,
+              58.9,
+              55.2,
+              58.9
+            ],
+            "avg": 60.9,
+            "ts": 1775277878.9609044,
+            "temps": {
+              "acpitz": [
+                0.0,
+                0.0,
+                10.0
+              ],
+              "nvme": [
+                38.85
+              ],
+              "pch_skylake": [
+                50.0
+              ],
+              "iwlwifi_1": [
+                39.0
+              ],
+              "coretemp": [
+                69.0,
+                69.0,
+                56.0,
+                57.0,
+                57.0
+              ]
+            },
+            "max_temp": 69.0
+          }
+        ]
+      }
+    },
+    "ram": {
+      "status": "OK",
+      "message": "",
+      "metrics": {
+        "tested_mb": 64.0,
+        "errors": [],
+        "throughput_mb_s": 6.131804458827459,
+        "samples": [
+          {
+            "pass": 1,
+            "tested_mb": 16.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 5.062796354293823,
+            "read_time_s": 0.0015254020690917969,
+            "timestamp": 1775277877.1974049
+          },
+          {
+            "pass": 1,
+            "tested_mb": 32.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 1.7950623035430908,
+            "read_time_s": 0.0015697479248046875,
+            "timestamp": 1775277878.9962
+          },
+          {
+            "pass": 1,
+            "tested_mb": 48.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 1.7787697315216064,
+            "read_time_s": 0.0015265941619873047,
+            "timestamp": 1775277880.7765071
+          },
+          {
+            "pass": 1,
+            "tested_mb": 64.0,
+            "chunk_mb": 16.0,
+            "write_time_s": 1.7922537326812744,
+            "read_time_s": 0.0015265941619873047,
+            "timestamp": 1775277882.5702972
+          }
+        ]
+      }
+    }
+  },
+  "details": {
+    "usb": {
+      "status": "OK",
+      "count": 4,
+      "devices": [
+        "Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub",
+        "Bus 001 Device 002: ID 8087:0a2a Intel Corp. Bluetooth wireless interface",
+        "Bus 001 Device 003: ID 13d3:56b2 IMC Networks Integrated Camera",
+        "Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub"
+      ],
+      "timestamp": "2026-04-03 23:44:32"
+    },
+    "hdmi": {
+      "status": "OK",
+      "count": 1,
+      "displays": [
+        {
+          "line": "eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 340mm x 190mm",
+          "name": "eDP-1",
+          "resolution": "1920x1080+0+0"
+        }
+      ],
+      "timestamp": "2026-04-03 23:44:33"
+    },
+    "gpio": {
+      "status": "UNSUPPORTED",
+      "note": "No Raspberry Pi GPIO libraries available",
+      "timestamp": "2026-04-03 23:44:33"
+    },
+    "network": {
+      "status": "OK",
+      "ping": [
+        {
+          "host": "8.8.8.8",
+          "ok": true,
+          "rc": 0,
+          "stdout_first": "PING 8.8.8.8 (8.8.8.8) 56(84) bytes of data."
+        },
+        {
+          "host": "1.1.1.1",
+          "ok": true,
+          "rc": 0,
+          "stdout_first": "PING 1.1.1.1 (1.1.1.1) 56(84) bytes of data."
+        }
+      ],
+      "dns": {
+        "host": "www.google.com",
+        "ip": "142.251.150.119",
+        "ok": true,
+        "latency_s": 0.010712146759033203
+      },
+      "interfaces": [
+        {
+          "name": "wlp1s0",
+          "up": true,
+          "addrs": [
+            "192.168.1.20",
+            "2605:59ca:5610:d400:d52:350b:e9a:906f",
+            "2605:59ca:5610:d400:ab63:5bf8:7953:3f6d",
+            "fe80::288a:c6a0:5314:df68%wlp1s0",
+            "30:24:32:f2:ba:7f"
+          ]
+        },
+        {
+          "name": "tailscale0",
+          "up": true,
+          "addrs": [
+            "100.123.91.44",
+            "fd7a:115c:a1e0::f034:5b2c",
+            "fe80::3b90:510a:e2c4:51fb%tailscale0"
+          ]
+        }
+      ],
+      "local_ip": "192.168.1.20",
+      "timestamp": "2026-04-03 23:44:34"
+    },
+    "sd": {
+      "status": "WARNING",
+      "devices": [
+        {
+          "device": "sysfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys",
+          "fstype": "sysfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 47.70822065443336,
+          "read_mb_s": 329.76680556647534,
+          "test_location": "mounted"
+        },
+        {
+          "device": "proc",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/proc",
+          "fstype": "proc",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 61.311718401683976,
+          "read_mb_s": 96.56451844987654,
+          "test_location": "mounted"
+        },
+        {
+          "device": "udev",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/dev",
+          "fstype": "devtmpfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 46.765498171438765,
+          "read_mb_s": 148.14057146893654,
+          "test_location": "mounted"
+        },
+        {
+          "device": "devpts",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/dev/pts",
+          "fstype": "devpts",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 47.98727754291827,
+          "read_mb_s": 86.01142224364035,
+          "test_location": "mounted"
+        },
+        {
+          "device": "tmpfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/run",
+          "fstype": "tmpfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 41.60200754316491,
+          "read_mb_s": 109.19183333441806,
+          "test_location": "mounted"
+        },
+        {
+          "device": "/dev/nvme0n1p",
+          "type": "NVMe SSD",
+          "size_gb": 0,
+          "mountpoint": "/",
+          "fstype": "ext4",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 50.86856571108046,
+          "read_mb_s": 186.45287338438115,
+          "test_location": "mounted"
+        },
+        {
+          "device": "securityfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/kernel/security",
+          "fstype": "securityfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 44.399791461016704,
+          "read_mb_s": 63.39541421683469,
+          "test_location": "mounted"
+        },
+        {
+          "device": "cgroup",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/fs/cgroup",
+          "fstype": "cgroup2",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 33.5471858078655,
+          "read_mb_s": 77.2887152649812,
+          "test_location": "mounted"
+        },
+        {
+          "device": "efivarfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/firmware/efi/efivars",
+          "fstype": "efivarfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 24.839899676346654,
+          "read_mb_s": 96.38422207668356,
+          "test_location": "mounted"
+        },
+        {
+          "device": "bpf",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/fs/bpf",
+          "fstype": "bpf",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 40.13592019329681,
+          "read_mb_s": 96.38145354481792,
+          "test_location": "mounted"
+        },
+        {
+          "device": "systemd-",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/proc/sys/fs/binfmt_misc",
+          "fstype": "autofs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 44.05087433702673,
+          "read_mb_s": 186.3037988739964,
+          "test_location": "mounted"
+        },
+        {
+          "device": "mqueue",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/dev/mqueue",
+          "fstype": "mqueue",
+          "status": "FAIL",
+          "note": "[Errno 22] Invalid argument",
+          "tested_mb": 4.0
+        },
+        {
+          "device": "hugetlbfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/dev/hugepages",
+          "fstype": "hugetlbfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 41.05813455500329,
+          "read_mb_s": 250.82924933096118,
+          "test_location": "mounted"
+        },
+        {
+          "device": "debugfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/kernel/debug",
+          "fstype": "debugfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 41.65158304762425,
+          "read_mb_s": 664.0759974667511,
+          "test_location": "mounted"
+        },
+        {
+          "device": "tracefs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/kernel/tracing",
+          "fstype": "tracefs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 21.273146627748183,
+          "read_mb_s": 96.18694782224821,
+          "test_location": "mounted"
+        },
+        {
+          "device": "fusectl",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/fs/fuse/connections",
+          "fstype": "fusectl",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 36.1627031256399,
+          "read_mb_s": 76.9261835438685,
+          "test_location": "mounted"
+        },
+        {
+          "device": "configfs",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/sys/kernel/config",
+          "fstype": "configfs",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 36.27796385873032,
+          "read_mb_s": 109.74538508837342,
+          "test_location": "mounted"
+        },
+        {
+          "device": "/dev/sda",
+          "type": "Hard Drive",
+          "size_gb": 0,
+          "mountpoint": "/mnt/data",
+          "fstype": "ext4",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 6.358963551937816,
+          "read_mb_s": 86.40744937269525,
+          "test_location": "mounted"
+        },
+        {
+          "device": "binfmt_misc",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/proc/sys/fs/binfmt_misc",
+          "fstype": "binfmt_misc",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 45.78784537624313,
+          "read_mb_s": 128.40656068943875,
+          "test_location": "mounted"
+        },
+        {
+          "device": "gvfsd-fuse",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/run/user/1000/gvfs",
+          "fstype": "fuse.gvfsd-fuse",
+          "status": "FAIL",
+          "note": "[Errno 2] No such file or directory: '/run/user/1000/gvfs/tmpbfww6jd_.apd_test'",
+          "tested_mb": 4.0
+        },
+        {
+          "device": "portal",
+          "type": "Unknown",
+          "size_gb": 0,
+          "mountpoint": "/run/user/1000/doc",
+          "fstype": "fuse.portal",
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 56.12441750382198,
+          "read_mb_s": 107.55935658830242,
+          "test_location": "mounted"
+        },
+        {
+          "device": "/dev/nvme0n",
+          "type": "NVMe SSD",
+          "size_gb": 0,
+          "mountpoint": null,
+          "fstype": null,
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 50.15895073262757,
+          "read_mb_s": 109.76620759593052,
+          "test_location": "fallback"
+        },
+        {
+          "device": "/dev/sda",
+          "type": "USB Drive",
+          "size_gb": 0,
+          "mountpoint": null,
+          "fstype": null,
+          "status": "OK",
+          "tested_mb": 4.0,
+          "write_mb_s": 43.931258952021096,
+          "read_mb_s": 125.89458518429583,
+          "test_location": "fallback"
+        }
+      ],
+      "total_devices": 23,
+      "tested_devices": 21,
+      "timestamp": "2026-04-03 23:44:36"
+    },
+    "cpu": {
+      "status": "OK",
+      "duration": 5,
+      "workers": 8,
+      "avg_cpu_percent": 70.58333333333333,
+      "per_cpu_percent": [
+        68.60000000000001,
+        67.06666666666666,
+        69.83333333333333,
+        70.63333333333333,
+        79.73333333333333,
+        72.4,
+        67.56666666666666,
+        68.83333333333333
+      ],
+      "samples_count": 3,
+      "max_temperature": 70.0,
+      "samples": [
+        {
+          "percpu": [
+            74.7,
+            72.8,
+            72.8,
+            77.6,
+            75.9,
+            74.4,
+            72.2,
+            72.6
+          ],
+          "avg": 74.125,
+          "ts": 1775277873.9936228,
+          "temps": {
+            "acpitz": [
+              0.0,
+              0.0,
+              10.0
+            ],
+            "nvme": [
+              38.85
+            ],
+            "pch_skylake": [
+              46.0
+            ],
+            "iwlwifi_1": [
+              39.0
+            ],
+            "coretemp": [
+              68.0,
+              65.0,
+              68.0,
+              67.0,
+              69.0
+            ]
+          },
+          "max_temp": 69.0
+        },
+        {
+          "percpu": [
+            75.3,
+            72.8,
+            77.4,
+            77.6,
+            76.5,
+            83.9,
+            75.3,
+            75.0
+          ],
+          "avg": 76.725,
+          "ts": 1775277876.1358156,
+          "temps": {
+            "acpitz": [
+              0.0,
+              0.0,
+              10.0
+            ],
+            "nvme": [
+              38.85
+            ],
+            "pch_skylake": [
+              48.0
+            ],
+            "iwlwifi_1": [
+              39.0
+            ],
+            "coretemp": [
+              72.0,
+              67.0,
+              70.0,
+              73.0,
+              71.0
+            ]
+          },
+          "max_temp": 73.0
+        },
+        {
+          "percpu": [
+            55.8,
+            55.6,
+            59.3,
+            56.7,
+            86.8,
+            58.9,
+            55.2,
+            58.9
+          ],
+          "avg": 60.9,
+          "ts": 1775277878.9609044,
+          "temps": {
+            "acpitz": [
+              0.0,
+              0.0,
+              10.0
+            ],
+            "nvme": [
+              38.85
+            ],
+            "pch_skylake": [
+              50.0
+            ],
+            "iwlwifi_1": [
+              39.0
+            ],
+            "coretemp": [
+              69.0,
+              69.0,
+              56.0,
+              57.0,
+              57.0
+            ]
+          },
+          "max_temp": 69.0
+        }
+      ],
+      "timestamp": "2026-04-03 23:44:40"
+    },
+    "ram": {
+      "status": "OK",
+      "tested_mb": 64.0,
+      "errors": [],
+      "throughput_mb_s": 6.131804458827459,
+      "samples": [
+        {
+          "pass": 1,
+          "tested_mb": 16.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 5.062796354293823,
+          "read_time_s": 0.0015254020690917969,
+          "timestamp": 1775277877.1974049
+        },
+        {
+          "pass": 1,
+          "tested_mb": 32.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 1.7950623035430908,
+          "read_time_s": 0.0015697479248046875,
+          "timestamp": 1775277878.9962
+        },
+        {
+          "pass": 1,
+          "tested_mb": 48.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 1.7787697315216064,
+          "read_time_s": 0.0015265941619873047,
+          "timestamp": 1775277880.7765071
+        },
+        {
+          "pass": 1,
+          "tested_mb": 64.0,
+          "chunk_mb": 16.0,
+          "write_time_s": 1.7922537326812744,
+          "read_time_s": 0.0015265941619873047,
+          "timestamp": 1775277882.5702972
+        }
+      ],
+      "timestamp": "2026-04-03 23:44:42"
+    }
+  },
+  "metadata": {
+    "timestamp": 1775277889.8459425,
+    "generated": "Fri Apr  3 23:44:49 2026",
+    "hostname": "Zorin-PC",
+    "platform": "Linux-6.17.0-20-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "os_release": {
+      "PRETTY_NAME": "Zorin OS 18",
+      "NAME": "Zorin OS",
+      "VERSION_ID": "18",
+      "VERSION": "18",
+      "VERSION_CODENAME": "noble",
+      "ID": "zorin",
+      "ID_LIKE": "ubuntu debian",
+      "HOME_URL": "https://zorin.com/os/",
+      "SUPPORT_URL": "https://help.zorin.com/",
+      "BUG_REPORT_URL": "https://zorin.com/os/feedback/",
+      "PRIVACY_POLICY_URL": "https://zorin.com/legal/privacy/",
+      "UBUNTU_CODENAME": "noble",
+      "LOGO": "zorin-logo"
+    },
+    "pi_model": null
+  }
+}</pre>
+</section>
+</body></html>

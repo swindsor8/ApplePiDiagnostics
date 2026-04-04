@@ -1,0 +1,50 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><title>Apple Pi Diagnostics Report</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+         color:#111;background:#fff;padding:2rem;max-width:860px;margin:0 auto}
+    header{display:flex;align-items:center;gap:16px;margin-bottom:1.5rem;
+           border-bottom:2px solid #0078d4;padding-bottom:1rem}
+    .logo{width:52px;height:52px}
+    h1{font-size:1.5rem;color:#0078d4}
+    .meta{font-size:0.82rem;color:#555;margin-top:4px}
+    h2{font-size:1.1rem;font-weight:700;margin:1.5rem 0 0.75rem;color:#111}
+    .card{border:1px solid #ddd;border-radius:8px;padding:1rem;margin-bottom:0.75rem}
+    .card-header{display:flex;justify-content:space-between;align-items:baseline;
+                 margin-bottom:0.4rem}
+    .card-title{font-weight:600;font-size:1rem}
+    .badge{font-size:0.8rem;font-weight:600;padding:2px 8px;border-radius:12px}
+    .pass{color:#1a8a4a;background:#e6f5ec}
+    .fail{color:#cc2200;background:#fdecea}
+    .unsupported{color:#b06000;background:#fff3e0}
+    .other{color:#555;background:#f0f0f0}
+    .lines{font-size:0.88rem;color:#333;line-height:1.6}
+    .issues-section h2{color:#cc2200}
+    .no-issues{color:#1a8a4a;font-size:0.9rem}
+    hr{border:none;border-top:1px solid #e0e0e0;margin:1.5rem 0}
+    @media(max-width:500px){body{padding:1rem}}
+    </style>
+</head><body>
+<header><img class="logo" src="file:///mnt/data/Documents/ApplePiDi/ApplePiDiagnostics/full-linux-gui/app/assets/apple_pi_logo.png" alt="logo"><div>
+<h1>Apple Pi Diagnostics Report</h1>
+<div class="meta">Generated: Fri Apr  3 23:59:05 2026
+ &nbsp;|&nbsp; Host: Zorin-PC
+ &nbsp;|&nbsp; Zorin OS 18
+
+</div></div></header>
+<div class="issues-section">
+<h2>Highlighted Issues</h2>
+<p class="no-issues">No issues found &mdash; all tests passed.</p>
+</div>
+<hr>
+<h2>All Results</h2>
+<div class="card"><div class="card-header"><span class="card-title">USB</span><span class="badge pass">Passed</span></div><div class="lines">Found 4 USB devices.<br>&nbsp;&nbsp;&bull; Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub<br>&nbsp;&nbsp;&bull; Bus 001 Device 002: ID 8087:0a2a Intel Corp. Bluetooth wireless interface<br>&nbsp;&nbsp;&bull; Bus 001 Device 003: ID 13d3:56b2 IMC Networks Integrated Camera<br>&nbsp;&nbsp;&bull; Bus 002 Device 001: ID 1d6b:0003 Linux Foundation 3.0 root hub</div></div>
+<div class="card"><div class="card-header"><span class="card-title">HDMI</span><span class="badge pass">Passed</span></div><div class="lines">1 display connected.<br>&nbsp;&nbsp;&bull; eDP-1: 1920x1080+0+0.</div></div>
+<div class="card"><div class="card-header"><span class="card-title">GPIO</span><span class="badge unsupported">Not supported</span></div><div class="lines">No Raspberry Pi GPIO libraries available</div></div>
+<div class="card"><div class="card-header"><span class="card-title">Network</span><span class="badge pass">Passed</span></div><div class="lines">Local IP address: 192.168.1.20.<br>Active interfaces: wlp1s0, tailscale0.<br>DNS resolution OK (6 ms).<br>Ping OK to: 8.8.8.8, 1.1.1.1.</div></div>
+<div class="card"><div class="card-header"><span class="card-title">Storage</span><span class="badge other">Pending</span></div><div class="lines">Found 23 storage devices; tested 21.<br>sysfs (sysfs): OK — 41 MB/s write, 107 MB/s read.<br>proc (proc): OK — 51 MB/s write, 110 MB/s read.<br>udev (devtmpfs): OK — 57 MB/s write, 84 MB/s read.<br>devpts (devpts): OK — 44 MB/s write, 129 MB/s read.<br>tmpfs (tmpfs): OK — 36 MB/s write, 152 MB/s read.<br>/dev/nvme0n1p (ext4): OK — 41 MB/s write, 107 MB/s read.<br>securityfs (securityfs): OK — 55 MB/s write, 147 MB/s read.<br>cgroup (cgroup2): OK — 41 MB/s write, 95 MB/s read.<br>efivarfs (efivarfs): OK — 34 MB/s write, 250 MB/s read.<br>bpf (bpf): OK — 42 MB/s write, 110 MB/s read.<br>systemd- (autofs): OK — 51 MB/s write, 86 MB/s read.<br>mqueue (mqueue): FAIL — [Errno 22] Invalid argument.<br>hugetlbfs (hugetlbfs): OK — 44 MB/s write, 127 MB/s read.<br>debugfs (debugfs): OK — 40 MB/s write, 71 MB/s read.<br>tracefs (tracefs): OK — 40 MB/s write, 104 MB/s read.<br>fusectl (fusectl): OK — 39 MB/s write, 52 MB/s read.<br>configfs (configfs): OK — 47 MB/s write, 126 MB/s read.<br>/dev/sda (ext4): OK — 8 MB/s write, 5517 MB/s read.<br>binfmt_misc (binfmt_misc): OK — 32 MB/s write, 110 MB/s read.<br>gvfsd-fuse (fuse.gvfsd-fuse): FAIL — [Errno 2] No such file or directory: '/run/user/1000/gvfs/tmpwf0f7gln.apd_test'.<br>portal (fuse.portal): OK — 57 MB/s write, 110 MB/s read.<br>/dev/nvme0n (None): OK — 47 MB/s write, 111 MB/s read.<br>/dev/sda (None): OK — 44 MB/s write, 111 MB/s read.</div></div>
+<div class="card"><div class="card-header"><span class="card-title">CPU</span><span class="badge pass">Passed</span></div><div class="lines">CPU averaged 75.6% load during the test.<br>Used 8 worker threads.<br>Peak temperature: 63 °C.<br>Per-core load: 75%, 75%, 74%, 80%, 76%, 76%, 75%, 74%.</div></div>
+<div class="card"><div class="card-header"><span class="card-title">RAM</span><span class="badge pass">Passed</span></div><div class="lines">Tested 64 MB of RAM.<br>No memory errors detected.<br>Throughput: 6 MB/s.</div></div>
+</body></html>

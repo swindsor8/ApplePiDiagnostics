@@ -7,7 +7,6 @@ import sys
 import platform
 import socket
 import threading
-import json
 from pathlib import Path
 from datetime import datetime
 from copy import deepcopy
@@ -34,30 +33,165 @@ APP_DIR = Path(__file__).resolve().parents[1]
 REPORT_DIR = APP_DIR / "reports"
 REPORT_DIR.mkdir(exist_ok=True)
 
+# ---------------------------------------------------------------------------
+# SVG icon helpers
+# ---------------------------------------------------------------------------
+
+# Feather-style SVG icons — stroke-based, colour driven by `currentColor`
+_SVG_ICONS = {
+    "cpu": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="4" width="16" height="16" rx="2"/>
+        <rect x="9" y="9" width="6" height="6"/>
+        <line x1="9" y1="1" x2="9" y2="4"/>
+        <line x1="15" y1="1" x2="15" y2="4"/>
+        <line x1="9" y1="20" x2="9" y2="23"/>
+        <line x1="15" y1="20" x2="15" y2="23"/>
+        <line x1="20" y1="9" x2="23" y2="9"/>
+        <line x1="20" y1="14" x2="23" y2="14"/>
+        <line x1="1" y1="9" x2="4" y2="9"/>
+        <line x1="1" y1="14" x2="4" y2="14"/>
+    </svg>""",
+
+    "ram": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="8" width="20" height="8" rx="2"/>
+        <line x1="6" y1="8" x2="6" y2="16"/>
+        <line x1="10" y1="8" x2="10" y2="16"/>
+        <line x1="14" y1="8" x2="14" y2="16"/>
+        <line x1="18" y1="8" x2="18" y2="16"/>
+        <line x1="6" y1="5" x2="6" y2="8"/>
+        <line x1="10" y1="5" x2="10" y2="8"/>
+        <line x1="14" y1="5" x2="14" y2="8"/>
+        <line x1="18" y1="5" x2="18" y2="8"/>
+    </svg>""",
+
+    "sd": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="5" rx="9" ry="3"/>
+        <path d="M3 5v5c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
+        <path d="M3 10v5c0 1.66 4.03 3 9 3s9-1.34 9-3v-5"/>
+        <path d="M3 15v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"/>
+    </svg>""",
+
+    "network": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10
+                 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>""",
+
+    "usb": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2v11"/>
+        <polyline points="8 6 12 2 16 6"/>
+        <circle cx="8" cy="17" r="2"/>
+        <circle cx="16" cy="15" r="2"/>
+        <path d="M12 13H8a2 2 0 0 0-2 2v2"/>
+        <path d="M12 13h4a2 2 0 0 0 2-2v-2"/>
+    </svg>""",
+
+    "hdmi": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="13" rx="2"/>
+        <line x1="8" y1="21" x2="16" y2="21"/>
+        <line x1="12" y1="16" x2="12" y2="21"/>
+    </svg>""",
+
+    "gpio": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <line x1="12" y1="2" x2="12" y2="9"/>
+        <line x1="12" y1="15" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="9" y2="12"/>
+        <line x1="15" y1="12" x2="22" y2="12"/>
+        <line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/>
+        <line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
+    </svg>""",
+
+    "sun": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"/>
+        <line x1="12" y1="1" x2="12" y2="3"/>
+        <line x1="12" y1="21" x2="12" y2="23"/>
+        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+        <line x1="1" y1="12" x2="3" y2="12"/>
+        <line x1="21" y1="12" x2="23" y2="12"/>
+        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>""",
+
+    "moon": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>""",
+
+    "refresh": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg>""",
+
+    "save": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+        <polyline points="17 21 17 13 7 13 7 21"/>
+        <polyline points="7 3 7 8 15 8"/>
+    </svg>""",
+
+    "folder": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </svg>""",
+}
+
+
+def _make_svg_pixmap(icon_key, size=20, color="#888888"):
+    """Render a named SVG icon to a QPixmap at the requested size and colour."""
+    svg_str = _SVG_ICONS.get(icon_key, "")
+    if not svg_str:
+        return None
+    try:
+        from PyQt5 import QtSvg
+        colored = svg_str.replace("currentColor", color)
+        renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(colored.encode()))
+        pixmap = QtGui.QPixmap(size, size)
+        pixmap.fill(QtCore.Qt.transparent)
+        painter = QtGui.QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        return pixmap
+    except Exception:
+        return None
+
 
 class StatusCard(QtWidgets.QWidget):
     """Card widget for displaying diagnostic test status (ASUS MyASus style)"""
     
-    def __init__(self, title, icon_text="●", parent=None):
+    def __init__(self, title, icon_key="cpu", parent=None):
         super().__init__(parent)
         self.title = title
-        self.icon_text = icon_text
+        self.icon_key = icon_key
         self.status = "PENDING"
         self.details = ""
         self._build_ui()
-        
+
     def _build_ui(self):
         self.setFixedSize(200, 160)
-        
+
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(8)
-        
+
         # Icon and title
         header = QtWidgets.QHBoxLayout()
-        icon_label = QtWidgets.QLabel(self.icon_text)
-        icon_label.setStyleSheet("font-size: 24px; font-weight: bold;")
-        header.addWidget(icon_label)
+        self.icon_label = QtWidgets.QLabel()
+        self.icon_label.setFixedSize(22, 22)
+        self.set_icon_color("#888888")
+        header.addWidget(self.icon_label)
         
         title_label = QtWidgets.QLabel(self.title)
         title_label.setObjectName("card_title")
@@ -136,6 +270,12 @@ class StatusCard(QtWidgets.QWidget):
         else:
             self.details_label.setText("")
 
+    def set_icon_color(self, color):
+        """Re-render the card icon in the given colour."""
+        pixmap = _make_svg_pixmap(self.icon_key, size=22, color=color)
+        if pixmap:
+            self.icon_label.setPixmap(pixmap)
+
 
 class MainWindow(QtWidgets.QMainWindow):
     sig_append = QtCore.pyqtSignal(str)
@@ -146,12 +286,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.latest_report_dir = None
         self.qr_manager = None
         self.test_cards = {}
-        self.test_results = {}  # Store all test results
-        self.results_lock = threading.Lock()  # Lock for thread-safe results updates
-        self.dark_mode = False  # Theme state
-        self.font_size = 13  # Base font size
-        self.sys_info_card = None  # Store reference to system info card
-        self.sys_info_labels = []  # Store system info labels for theme updates
+        self.overview_cards = {}
+        self.test_results = {}
+        self.results_lock = threading.Lock()
+        self.sys_info_card = None
+        self.sys_info_labels = []
         self.setWindowTitle("Apple Pi Diagnostics")
         self.setMinimumSize(1000, 700)
         self._build_ui()
@@ -246,12 +385,6 @@ class MainWindow(QtWidgets.QMainWindow):
             }
         """
         
-        # Theme toggle button
-        self.theme_btn = QtWidgets.QPushButton("🌙 Dark")
-        self.theme_btn.setStyleSheet(btn_style)
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        layout.addWidget(self.theme_btn)
-        
         self.run_all_btn = QtWidgets.QPushButton("Run All Tests")
         self.run_all_btn.setStyleSheet(btn_style)
         self.run_all_btn.clicked.connect(self.run_all_tests)
@@ -290,13 +423,13 @@ class MainWindow(QtWidgets.QMainWindow):
         summary_grid.setSpacing(16)
         
         tests = [
-            ("CPU", "⚡", "cpu"),
-            ("RAM", "💾", "ram"),
-            ("Storage", "💿", "sd"),
-            ("Network", "🌐", "network"),
-            ("USB", "🔌", "usb"),
-            ("HDMI", "🖥️", "hdmi"),
-            ("GPIO", "📌", "gpio"),
+            ("CPU", "cpu", "cpu"),
+            ("RAM", "ram", "ram"),
+            ("Storage", "sd", "sd"),
+            ("Network", "network", "network"),
+            ("USB", "usb", "usb"),
+            ("HDMI", "hdmi", "hdmi"),
+            ("GPIO", "gpio", "gpio"),
         ]
         
         row, col = 0, 0
@@ -304,6 +437,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Create separate cards for overview (read-only status display)
             card = StatusCard(title, icon)
             card.test_btn.hide()
+            self.overview_cards[test_id] = card
             # Update status from test results if available
             if test_id in self.test_results:
                 with self.results_lock:
@@ -338,12 +472,11 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Instructions
         info_label = QtWidgets.QLabel("Select individual tests to run, or use 'Run All Tests' to test everything.")
+        info_label.setObjectName("info_label")
         info_label.setStyleSheet("""
             font-size: 14px;
-            color: #666666;
-            padding: 12px;
-            background-color: #e8f4f8;
-            border-radius: 8px;
+            color: #444444;
+            padding: 4px 0 8px 0;
         """)
         layout.addWidget(info_label)
         
@@ -362,13 +495,13 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Create test cards (reuse from overview but with test buttons)
         tests = [
-            ("CPU", "⚡", "cpu"),
-            ("RAM", "💾", "ram"),
-            ("Storage", "💿", "sd"),
-            ("Network", "🌐", "network"),
-            ("USB", "🔌", "usb"),
-            ("HDMI", "🖥️", "hdmi"),
-            ("GPIO", "📌", "gpio"),
+            ("CPU", "cpu", "cpu"),
+            ("RAM", "ram", "ram"),
+            ("Storage", "sd", "sd"),
+            ("Network", "network", "network"),
+            ("USB", "usb", "usb"),
+            ("HDMI", "hdmi", "hdmi"),
+            ("GPIO", "gpio", "gpio"),
         ]
         
         row, col = 0, 0
@@ -437,7 +570,7 @@ class MainWindow(QtWidgets.QMainWindow):
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { border: none; background-color: #ffffff; }")
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
         
         self.results_widget = QtWidgets.QWidget()
         self.results_layout = QtWidgets.QVBoxLayout(self.results_widget)
@@ -467,60 +600,6 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         layout.addWidget(title)
         
-        # Theme Settings Card
-        theme_card = self._create_setting_card("Appearance", "Theme and visual preferences")
-        theme_layout = QtWidgets.QVBoxLayout()
-        theme_layout.setSpacing(12)
-        
-        # Theme selection
-        theme_label = QtWidgets.QLabel("Theme:")
-        theme_label.setObjectName("setting_label")
-        theme_layout.addWidget(theme_label)
-        
-        theme_group = QtWidgets.QButtonGroup()
-        theme_hbox = QtWidgets.QHBoxLayout()
-        
-        self.light_theme_radio = QtWidgets.QRadioButton("☀️ Light")
-        self.light_theme_radio.setObjectName("theme_radio")
-        self.light_theme_radio.setChecked(not self.dark_mode)
-        self.light_theme_radio.toggled.connect(lambda checked: self._on_theme_changed("light") if checked else None)
-        theme_group.addButton(self.light_theme_radio)
-        theme_hbox.addWidget(self.light_theme_radio)
-        
-        self.dark_theme_radio = QtWidgets.QRadioButton("🌙 Dark")
-        self.dark_theme_radio.setObjectName("theme_radio")
-        self.dark_theme_radio.setChecked(self.dark_mode)
-        self.dark_theme_radio.toggled.connect(lambda checked: self._on_theme_changed("dark") if checked else None)
-        theme_group.addButton(self.dark_theme_radio)
-        theme_hbox.addWidget(self.dark_theme_radio)
-        
-        theme_hbox.addStretch()
-        theme_layout.addLayout(theme_hbox)
-        
-        # Font size setting
-        font_label = QtWidgets.QLabel("Font Size:")
-        font_label.setObjectName("setting_label")
-        theme_layout.addWidget(font_label)
-        
-        font_hbox = QtWidgets.QHBoxLayout()
-        self.font_size_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-        self.font_size_slider.setMinimum(10)
-        self.font_size_slider.setMaximum(20)
-        self.font_size_slider.setValue(self.font_size)
-        self.font_size_slider.setTickPosition(QtWidgets.QSlider.TicksBelow)
-        self.font_size_slider.setTickInterval(2)
-        self.font_size_slider.valueChanged.connect(self._on_font_size_changed)
-        font_hbox.addWidget(self.font_size_slider)
-        
-        self.font_size_label = QtWidgets.QLabel(f"{self.font_size}px")
-        self.font_size_label.setObjectName("setting_value")
-        self.font_size_label.setMinimumWidth(50)
-        font_hbox.addWidget(self.font_size_label)
-        
-        theme_layout.addLayout(font_hbox)
-        theme_card.layout().addLayout(theme_layout)
-        layout.addWidget(theme_card)
-        
         # Network Settings Card
         network_card = self._create_setting_card("Network", "Network configuration and status")
         network_layout = QtWidgets.QVBoxLayout()
@@ -532,7 +611,7 @@ class MainWindow(QtWidgets.QMainWindow):
         network_layout.addWidget(status_label)
         
         # Refresh network info button
-        refresh_btn = QtWidgets.QPushButton("🔄 Refresh Network Info")
+        refresh_btn = QtWidgets.QPushButton("Refresh Network Info")
         refresh_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
@@ -557,8 +636,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.network_info_text.setObjectName("network_info")
         self.network_info_text.setStyleSheet("""
             QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #e0e0e0;
+                background-color: transparent;
+                border: 1px solid #d8d8d8;
                 border-radius: 6px;
                 padding: 8px;
                 font-family: 'Courier New', monospace;
@@ -595,14 +674,14 @@ class MainWindow(QtWidgets.QMainWindow):
         card_layout.setSpacing(8)
         
         card_title = QtWidgets.QLabel(title)
-        card_title.setObjectName("card_title")
+        card_title.setObjectName("section_card_title")
         card_title.setStyleSheet("""
             font-size: 18px;
             font-weight: 600;
             color: #1a1a1a;
         """)
         card_layout.addWidget(card_title)
-        
+
         card_desc = QtWidgets.QLabel(description)
         card_desc.setObjectName("card_desc")
         card_desc.setStyleSheet("""
@@ -613,30 +692,6 @@ class MainWindow(QtWidgets.QMainWindow):
         card_layout.addWidget(card_desc)
         
         return card
-    
-    def _on_theme_changed(self, theme):
-        """Handle theme change from settings"""
-        self.dark_mode = (theme == "dark")
-        self._apply_theme()
-        # Update radio buttons
-        self.light_theme_radio.setChecked(not self.dark_mode)
-        self.dark_theme_radio.setChecked(self.dark_mode)
-        # Update header button
-        self.theme_btn.setText("☀️ Light" if self.dark_mode else "🌙 Dark")
-    
-    def _on_font_size_changed(self, value):
-        """Handle font size change"""
-        self.font_size = value
-        self.font_size_label.setText(f"{value}px")
-        self._apply_font_size()
-    
-    def _apply_font_size(self):
-        """Apply font size to the application"""
-        # Update base font sizes throughout the app
-        # This is a simplified approach - you could make it more comprehensive
-        base_style = f"font-size: {self.font_size}px;"
-        # Apply to various elements as needed
-        pass  # Font size changes can be applied more comprehensively if needed
     
     def _refresh_network_info(self):
         """Refresh and display network information"""
@@ -782,82 +837,199 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.results_layout.addStretch()
 
+    def _summarize_result(self, test_id, result):
+        """Return a list of plain-English summary lines for a test result."""
+        status = result.get("status", "UNKNOWN")
+        lines = []
+
+        if test_id == "cpu":
+            avg = result.get("avg_cpu_percent")
+            if avg is not None:
+                lines.append(f"CPU averaged {avg:.1f}% load during the test.")
+            workers = result.get("workers")
+            if workers:
+                lines.append(f"Used {workers} worker thread{'s' if workers != 1 else ''}.")
+            temp = result.get("max_temperature")
+            if temp is not None:
+                lines.append(f"Peak temperature: {temp:.0f} °C.")
+            per_cpu = result.get("per_cpu_percent", [])
+            if per_cpu:
+                lines.append(f"Individual cores: {', '.join(f'{v:.0f}%' for v in per_cpu)}.")
+
+        elif test_id == "ram":
+            tested = result.get("tested_mb")
+            if tested is not None:
+                lines.append(f"Tested {tested:.0f} MB of RAM.")
+            errors = result.get("errors", [])
+            if errors:
+                lines.append(f"Errors found: {'; '.join(str(e) for e in errors[:3])}.")
+            else:
+                lines.append("No memory errors detected.")
+            tp = result.get("throughput_mb_s")
+            if tp is not None:
+                lines.append(f"Throughput: {tp:.0f} MB/s.")
+
+        elif test_id == "sd":
+            total = result.get("total_devices", 0)
+            tested_d = result.get("tested_devices", 0)
+            lines.append(f"Found {total} storage device{'s' if total != 1 else ''}; tested {tested_d}.")
+            for dev in result.get("devices", []):
+                name = dev.get("device", "?")
+                size = dev.get("size_gb")
+                fs = dev.get("fstype", "unknown fs")
+                dev_status = dev.get("status", "?")
+                w = dev.get("write_mb_s")
+                r = dev.get("read_mb_s")
+                note = dev.get("note", "")
+                size_str = f"{size:.0f} GB, " if size else ""
+                speed_str = ""
+                if w is not None and r is not None:
+                    speed_str = f" — {w:.0f} MB/s write, {r:.0f} MB/s read"
+                elif note:
+                    speed_str = f" — {note}"
+                lines.append(f"{name} ({size_str}{fs}): {dev_status}{speed_str}.")
+
+        elif test_id == "network":
+            local_ip = result.get("local_ip")
+            if local_ip:
+                lines.append(f"Local IP address: {local_ip}.")
+            ifaces = result.get("interfaces", [])
+            up_ifaces = [i["name"] for i in ifaces if i.get("up")]
+            if up_ifaces:
+                lines.append(f"Active interfaces: {', '.join(up_ifaces)}.")
+            dns = result.get("dns", {})
+            if dns.get("ok"):
+                lat = dns.get("latency_s")
+                lat_str = f" ({lat*1000:.0f} ms)" if lat is not None else ""
+                lines.append(f"DNS resolution OK{lat_str}.")
+            elif dns:
+                lines.append(f"DNS resolution failed: {dns.get('note', '')}.")
+            pings = result.get("ping", [])
+            ok_pings = [p["host"] for p in pings if p.get("ok")]
+            fail_pings = [p["host"] for p in pings if not p.get("ok")]
+            if ok_pings:
+                lines.append(f"Ping OK to: {', '.join(ok_pings)}.")
+            if fail_pings:
+                lines.append(f"Ping failed to: {', '.join(fail_pings)}.")
+
+        elif test_id == "usb":
+            count = result.get("count")
+            if count is not None:
+                lines.append(f"Found {count} USB device{'s' if count != 1 else ''}.")
+            devices = result.get("devices", [])
+            for d in devices[:5]:
+                lines.append(f"  • {d}")
+            if len(devices) > 5:
+                lines.append(f"  … and {len(devices) - 5} more.")
+            note = result.get("note", "")
+            if note and status != "OK":
+                lines.append(note)
+            w = result.get("write_mb_s")
+            r = result.get("read_mb_s")
+            if w is not None and r is not None:
+                lines.append(f"Speed test: {w:.0f} MB/s write, {r:.0f} MB/s read.")
+
+        elif test_id == "hdmi":
+            count = result.get("count")
+            if count is not None:
+                lines.append(f"{count} display{'s' if count != 1 else ''} connected.")
+            for d in result.get("displays", []):
+                name = d.get("name", "Unknown")
+                res = d.get("resolution", "")
+                lines.append(f"  • {name}{': ' + res if res else ''}.")
+            note = result.get("note", "")
+            if note:
+                lines.append(note)
+
+        elif test_id == "gpio":
+            note = result.get("note", "")
+            driver = result.get("driver", "")
+            if driver:
+                lines.append(f"GPIO driver: {driver}.")
+            if note:
+                lines.append(note)
+            gpio_results = result.get("results", [])
+            if gpio_results:
+                passed = sum(1 for r in gpio_results if r)
+                lines.append(f"Loopback: {passed}/{len(gpio_results)} pulses verified.")
+
+        else:
+            note = result.get("note", result.get("error", ""))
+            if note:
+                lines.append(note)
+
+        if not lines:
+            lines.append("No details available.")
+
+        return lines
+
     def _create_result_card(self, test_id, result):
         """Create a card displaying a test result"""
+        card_bg = "#ffffff"
+        border_color = "#d8d8d8"
+        text_color = "#111111"
+        summary_color = "#333333"
+
         card = QtWidgets.QWidget()
-        card.setStyleSheet("""
-            QWidget {
-                background-color: #ffffff;
+        card.setObjectName("result_card")
+        card.setStyleSheet(f"""
+            QWidget#result_card {{
+                background-color: {card_bg};
                 border-radius: 12px;
-                border: 1px solid #e0e0e0;
-                padding: 16px;
-            }
+                border: 1px solid {border_color};
+            }}
         """)
-        
+
         layout = QtWidgets.QVBoxLayout(card)
         layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-        
-        # Header with test name and status
+        layout.setSpacing(10)
+
+        # Header: test name + pass/fail badge
         header = QtWidgets.QHBoxLayout()
-        test_name = QtWidgets.QLabel(test_id.upper())
-        test_name.setStyleSheet("""
-            font-size: 16px;
-            font-weight: 600;
-            color: #1a1a1a;
-        """)
+        test_labels = {
+            "cpu": "CPU", "ram": "RAM", "sd": "Storage",
+            "network": "Network", "usb": "USB", "hdmi": "HDMI", "gpio": "GPIO",
+        }
+        test_name = QtWidgets.QLabel(test_labels.get(test_id, test_id.upper()))
+        test_name.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {text_color};")
         header.addWidget(test_name)
         header.addStretch()
-        
+
         status = result.get("status", "UNKNOWN")
-        if status == "OK" or status == "PASS":
-            status_color = "#10b981"
-            status_text = "✓ PASS"
-        elif status == "FAIL" or status == "ERROR":
-            status_color = "#ef4444"
-            status_text = "✗ FAIL"
+        if status in ("OK", "PASS"):
+            status_color, status_text = "#10b981", "✓ Passed"
+        elif status in ("FAIL", "ERROR"):
+            status_color, status_text = "#ef4444", "✗ Failed"
         elif status == "UNSUPPORTED":
-            status_color = "#f59e0b"
-            status_text = "— UNSUPPORTED"
+            status_color, status_text = "#f59e0b", "— Not supported"
         else:
-            status_color = "#6b7280"
-            status_text = "○ UNKNOWN"
-        
+            status_color, status_text = "#6b7280", "○ Unknown"
+
         status_label = QtWidgets.QLabel(status_text)
-        status_label.setStyleSheet(f"""
-            font-size: 14px;
-            font-weight: 600;
-            color: {status_color};
-        """)
+        status_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {status_color};")
         header.addWidget(status_label)
         layout.addLayout(header)
-        
-        # Result details
-        details_text = QtWidgets.QTextEdit()
-        details_text.setReadOnly(True)
-        details_text.setMaximumHeight(200)
-        details_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                padding: 8px;
-                font-family: 'Courier New', monospace;
-                font-size: 12px;
-            }
-        """)
-        
-        # Format result as JSON
-        formatted_result = json.dumps(result, indent=2)
-        details_text.setPlainText(formatted_result)
-        layout.addWidget(details_text)
-        
+
+        # Divider
+        divider = QtWidgets.QFrame()
+        divider.setFrameShape(QtWidgets.QFrame.HLine)
+        divider.setStyleSheet(f"color: {border_color};")
+        layout.addWidget(divider)
+
+        # Plain-English summary
+        summary_lines = self._summarize_result(test_id, result)
+        summary_text = "\n".join(summary_lines)
+        summary_label = QtWidgets.QLabel(summary_text)
+        summary_label.setWordWrap(True)
+        summary_label.setStyleSheet(f"font-size: 13px; color: {summary_color}; padding: 2px 0;")
+        layout.addWidget(summary_label)
+
         # Timestamp
         timestamp = result.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         time_label = QtWidgets.QLabel(f"Tested: {timestamp}")
         time_label.setStyleSheet("font-size: 11px; color: #888888;")
         layout.addWidget(time_label)
-        
+
         return card
 
     def run_test(self, test_id):
@@ -1001,9 +1173,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 "details": details
             }
             
-            results = build_report(report_data, REPORT_DIR, formats=("pdf",))
+            results = build_report(report_data, REPORT_DIR, formats=("pdf", "html"))
             self.latest_report_dir = REPORT_DIR
-            
+
             if "pdf" in results and results["pdf"]:
                 pdf_path = results["pdf"]
                 self._show_pdf_preview(pdf_path)
@@ -1037,7 +1209,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Buttons
         button_layout = QtWidgets.QHBoxLayout()
         
-        save_usb_btn = QtWidgets.QPushButton("💾 Save to USB Drive")
+        save_usb_btn = QtWidgets.QPushButton("Save to USB Drive")
         save_usb_btn.setStyleSheet("""
             QPushButton {
                 background-color: #0078d4;
@@ -1057,7 +1229,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         button_layout.addStretch()
         
-        open_btn = QtWidgets.QPushButton("📂 Open File Location")
+        open_btn = QtWidgets.QPushButton("Open File Location")
         open_btn.setStyleSheet("""
             QPushButton {
                 background-color: #666666;
@@ -1219,22 +1391,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f"Error: {e}", 3000)
 
     def _update_tab_style(self):
-        """Update tab styling based on current theme"""
-        bg_color = "#1a1a1a" if self.dark_mode else "#f5f5f5"
-        tab_bg = "#2d2d2d" if self.dark_mode else "#ffffff"
-        tab_text = "#e0e0e0" if self.dark_mode else "#666666"
-        selected_bg = "#0078d4"
-        hover_bg = "#3d3d3d" if self.dark_mode else "#e8f4f8"
-        border_color = "#444444" if self.dark_mode else "#e0e0e0"
-        
-        self.tabs.setStyleSheet(f"""
-            QTabWidget::pane {{
-                border: 1px solid {border_color};
-                background-color: {bg_color};
-            }}
-            QTabBar::tab {{
-                background-color: {tab_bg};
-                color: {tab_text};
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #d8d8d8;
+                background-color: #ffffff;
+            }
+            QTabBar::tab {
+                background-color: #ffffff;
+                color: #555555;
                 padding: 14px 40px;
                 margin-right: 2px;
                 border-top-left-radius: 6px;
@@ -1242,50 +1406,25 @@ class MainWindow(QtWidgets.QMainWindow):
                 font-size: 15px;
                 font-weight: 500;
                 min-width: 120px;
-            }}
-            QTabBar::tab:selected {{
-                background-color: {selected_bg};
+            }
+            QTabBar::tab:selected {
+                background-color: #0078d4;
                 color: white;
-            }}
-            QTabBar::tab:hover {{
-                background-color: {hover_bg};
-            }}
+            }
+            QTabBar::tab:hover {
+                background-color: #f0f6ff;
+            }
         """)
 
-    def toggle_theme(self):
-        """Toggle between light and dark theme"""
-        self.dark_mode = not self.dark_mode
-        self._apply_theme()
-        self.theme_btn.setText("☀️ Light" if self.dark_mode else "🌙 Dark")
-        # Update settings page radio buttons if they exist
-        if hasattr(self, 'light_theme_radio'):
-            self.light_theme_radio.setChecked(not self.dark_mode)
-            self.dark_theme_radio.setChecked(self.dark_mode)
-
     def _apply_theme(self):
-        """Apply the current theme to all UI elements"""
-        if self.dark_mode:
-            # Dark theme colors
-            bg_color = "#1a1a1a"
-            card_bg = "#2d2d2d"
-            text_color = "#e0e0e0"
-            text_secondary = "#b0b0b0"
-            text_tertiary = "#888888"
-            border_color = "#444444"
-            header_bg = "#2d2d2d"
-            info_bg = "#1e3a5f"
-            scroll_bg = "#2d2d2d"
-        else:
-            # Light theme colors
-            bg_color = "#f5f5f5"
-            card_bg = "#ffffff"
-            text_color = "#1a1a1a"
-            text_secondary = "#666666"
-            text_tertiary = "#888888"
-            border_color = "#e0e0e0"
-            header_bg = "#ffffff"
-            info_bg = "#e8f4f8"
-            scroll_bg = "#ffffff"
+        """Apply the light theme to all UI elements."""
+        bg_color = "#ffffff"
+        card_bg = "#ffffff"
+        text_color = "#111111"
+        text_secondary = "#444444"
+        text_tertiary = "#666666"
+        border_color = "#d8d8d8"
+        header_bg = "#ffffff"
         
         # Update main window and central widget
         self.centralWidget().setStyleSheet(f"""
@@ -1337,8 +1476,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 }}
             """)
         
-        # Update status cards
-        for card in self.test_cards.values():
+        # Update status cards (testing page + overview page)
+        all_cards = list(self.test_cards.values()) + list(self.overview_cards.values())
+        for card in all_cards:
+            card.set_icon_color("#555555")
             card.setStyleSheet(f"""
                 StatusCard {{
                     background-color: {card_bg};
@@ -1347,7 +1488,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 }}
                 StatusCard:hover {{
                     border: 2px solid #0078d4;
-                    background-color: {'#3d3d3d' if self.dark_mode else '#f8f9fa'};
+                    background-color: #f0f6ff;
                 }}
                 QLabel#card_title {{
                     font-size: 14px;
@@ -1393,14 +1534,11 @@ class MainWindow(QtWidgets.QMainWindow):
                     color: {text_color} !important;
                     padding: 8px 0;
                 """)
-            elif "Select individual tests" in current_text or "No test results" in current_text:
-                # Info labels
+            elif label.objectName() == "info_label" or "No test results" in current_text:
                 label.setStyleSheet(f"""
                     font-size: 14px;
                     color: {text_secondary} !important;
-                    padding: 12px;
-                    background-color: {info_bg};
-                    border-radius: 8px;
+                    padding: 4px 0 8px 0;
                 """)
             elif "font-size: 14px" in current_style and "color: #666666" in current_style:
                 # Secondary text
@@ -1420,26 +1558,9 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Update scroll areas
         for scroll in self.findChildren(QtWidgets.QScrollArea):
-            scroll.setStyleSheet(f"QScrollArea {{ border: none; background-color: {scroll_bg}; }}")
+            scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
         
-        # Update result cards
-        for widget in self.findChildren(QtWidgets.QWidget):
-            if hasattr(widget, 'layout') and widget.layout():
-                # Check if it's a result card
-                for i in range(widget.layout().count()):
-                    item = widget.layout().itemAt(i)
-                    if item and item.widget():
-                        child = item.widget()
-                        if isinstance(child, QtWidgets.QLabel) and child.text().upper() in ["CPU", "RAM", "SD", "NETWORK", "USB", "HDMI", "GPIO"]:
-                            widget.setStyleSheet(f"""
-                                QWidget {{
-                                    background-color: {card_bg};
-                                    border-radius: 12px;
-                                    border: 1px solid {border_color};
-                                    padding: 16px;
-                                }}
-                            """)
-                            break
+        # Result cards are rebuilt by _update_results_display() called below
         
         # Update settings page elements
         for widget in self.findChildren(QtWidgets.QWidget):
@@ -1462,7 +1583,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     color: {text_color} !important;
                     padding-bottom: 8px;
                 """)
-            elif label.objectName() == "card_title":
+            elif label.objectName() == "section_card_title":
                 label.setStyleSheet(f"""
                     font-size: 18px;
                     font-weight: 600;
@@ -1486,43 +1607,20 @@ class MainWindow(QtWidgets.QMainWindow):
                     color: {text_secondary} !important;
                 """)
         
-        # Update radio buttons
-        for radio in self.findChildren(QtWidgets.QRadioButton):
-            if radio.objectName() == "theme_radio":
-                radio.setStyleSheet(f"""
-                    QRadioButton {{
-                        color: {text_color} !important;
-                        font-size: 14px;
-                    }}
-                    QRadioButton::indicator {{
-                        width: 18px;
-                        height: 18px;
-                    }}
-                    QRadioButton::indicator::unchecked {{
-                        border: 2px solid {border_color};
-                        border-radius: 9px;
-                        background-color: {card_bg};
-                    }}
-                    QRadioButton::indicator::checked {{
-                        border: 2px solid #0078d4;
-                        border-radius: 9px;
-                        background-color: #0078d4;
-                    }}
-                """)
-        
         # Update network info text
         if hasattr(self, 'network_info_text'):
             self.network_info_text.setStyleSheet(f"""
                 QTextEdit#network_info {{
-                    background-color: {'#1e1e1e' if self.dark_mode else '#f8f9fa'};
+                    background-color: transparent;
                     border: 1px solid {border_color};
                     border-radius: 6px;
                     padding: 8px;
                     font-family: 'Courier New', monospace;
                     font-size: 12px;
-                    color: {text_color} !important;
+                    color: {text_color};
                 }}
             """)
+
 
     def closeEvent(self, event):
         if self.qr_manager:
@@ -1536,12 +1634,14 @@ def main():
     # Set application style
     app.setStyle("Fusion")
     
-    # Apply modern color palette
     palette = QtGui.QPalette()
-    palette.setColor(QtGui.QPalette.Window, QtGui.QColor(245, 245, 245))
-    palette.setColor(QtGui.QPalette.WindowText, QtGui.QColor(26, 26, 26))
+    palette.setColor(QtGui.QPalette.Window, QtGui.QColor(255, 255, 255))
+    palette.setColor(QtGui.QPalette.WindowText, QtGui.QColor(17, 17, 17))
     palette.setColor(QtGui.QPalette.Base, QtGui.QColor(255, 255, 255))
     palette.setColor(QtGui.QPalette.AlternateBase, QtGui.QColor(248, 249, 250))
+    palette.setColor(QtGui.QPalette.Text, QtGui.QColor(17, 17, 17))
+    palette.setColor(QtGui.QPalette.Button, QtGui.QColor(255, 255, 255))
+    palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor(17, 17, 17))
     app.setPalette(palette)
     
     # Show splash screen

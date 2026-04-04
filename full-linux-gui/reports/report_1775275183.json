@@ -1,0 +1,41 @@
+{
+  "cpu": {
+    "status": "OK",
+    "avg_cpu_percent": 72.0,
+    "max_temperature": 66.0
+  },
+  "ram": {
+    "status": "OK",
+    "tested_mb": 64.0,
+    "throughput_mb_s": 7.4
+  },
+  "storage": {
+    "status": "WARNING",
+    "total_devices": 23,
+    "tested_devices": 21
+  },
+  "title": "Apple Pi Diagnostics Report",
+  "metadata": {
+    "timestamp": 1775275183.4017289,
+    "generated": "Fri Apr  3 22:59:43 2026",
+    "hostname": "Zorin-PC",
+    "platform": "Linux-6.17.0-20-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "os_release": {
+      "PRETTY_NAME": "Zorin OS 18",
+      "NAME": "Zorin OS",
+      "VERSION_ID": "18",
+      "VERSION": "18",
+      "VERSION_CODENAME": "noble",
+      "ID": "zorin",
+      "ID_LIKE": "ubuntu debian",
+      "HOME_URL": "https://zorin.com/os/",
+      "SUPPORT_URL": "https://help.zorin.com/",
+      "BUG_REPORT_URL": "https://zorin.com/os/feedback/",
+      "PRIVACY_POLICY_URL": "https://zorin.com/legal/privacy/",
+      "UBUNTU_CODENAME": "noble",
+      "LOGO": "zorin-logo"
+    },
+    "pi_model": null
+  }
+}
