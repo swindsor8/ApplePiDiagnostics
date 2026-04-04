@@ -1,0 +1,96 @@
+name: Check PiShrink Updates
+
+# Runs every Monday at 08:00 UTC and can be triggered manually from the
+# Actions tab.  If a newer PiShrink commit is found on master it opens a
+# pull request that updates PISHRINK_COMMIT and PISHRINK_SHA256 in
+# build-image.sh.
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'   # Every Monday 08:00 UTC
+  workflow_dispatch:        # Manual trigger from Actions tab
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push branch
+      pull-requests: write   # open PR
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read current pinned commit
+        id: before
+        run: |
+          commit=$(awk -F'"' '/^PISHRINK_COMMIT=/{print $2}' build-image.sh)
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+
+      - name: Run update-pishrink script
+        run: |
+          chmod +x scripts/update-pishrink.sh
+          ./scripts/update-pishrink.sh
+
+      - name: Read new pinned commit
+        id: after
+        run: |
+          commit=$(awk -F'"' '/^PISHRINK_COMMIT=/{print $2}' build-image.sh)
+          sha256=$(awk -F'"' '/^PISHRINK_SHA256=/{print $2}' build-image.sh)
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${sha256}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine if update is needed
+        id: changed
+        run: |
+          if [ "${{ steps.before.outputs.commit }}" != "${{ steps.after.outputs.commit }}" ]; then
+            echo "updated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            echo "PiShrink is already at the latest commit. Nothing to do."
+          fi
+
+      - name: Create pull request
+        if: steps.changed.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_COMMIT: ${{ steps.after.outputs.commit }}
+          NEW_SHA256: ${{ steps.after.outputs.sha256 }}
+          OLD_COMMIT: ${{ steps.before.outputs.commit }}
+        run: |
+          BRANCH="chore/pishrink-${NEW_COMMIT:0:12}"
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add build-image.sh
+          git commit -m "chore: update PiShrink pin to ${NEW_COMMIT:0:12}
+
+          Old commit: ${OLD_COMMIT}
+          New commit: ${NEW_COMMIT}
+          New SHA256: ${NEW_SHA256}"
+
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "chore: update PiShrink pin to ${NEW_COMMIT:0:12}" \
+            --body "$(cat <<EOF
+          ## PiShrink dependency update
+
+          A new commit has been pushed to [Drewsif/PiShrink](https://github.com/Drewsif/PiShrink/commits/master).
+
+          | | Value |
+          |---|---|
+          | **Old commit** | \`${OLD_COMMIT}\` |
+          | **New commit** | \`${NEW_COMMIT}\` |
+          | **New SHA256** | \`${NEW_SHA256}\` |
+
+          ### What to do before merging
+          - [ ] Review the [PiShrink diff](https://github.com/Drewsif/PiShrink/compare/${OLD_COMMIT}...${NEW_COMMIT}) for any breaking changes
+          - [ ] Confirm the build still works with the updated script
+
+          *This PR was opened automatically by the [Check PiShrink Updates](${{ github.server_url }}/${{ github.repository }}/actions/workflows/update-pishrink.yml) workflow.*
+          EOF
+          )" \
+            --base main \
+            --label "dependencies"

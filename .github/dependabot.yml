@@ -3,11 +3,22 @@
 
 version: 2
 updates:
+  # Python dependencies — requirements.txt lives in full-linux-gui/, not root
   - package-ecosystem: "pip"
-    directory: "/" # Location of requirements.txt / pyproject.toml / setup.py
+    directory: "/full-linux-gui"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
     labels:
       - "dependencies"
       - "python"
+
+  # GitHub Actions — keep all workflow action versions up to date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"

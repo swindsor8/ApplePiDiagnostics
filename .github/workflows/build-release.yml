@@ -97,6 +97,37 @@ jobs:
       # -----------------------------------------------------------------------
       # 7. Create GitHub Release and attach assets
       # -----------------------------------------------------------------------
+
+      # Write release notes to a file so variables expand correctly.
+      # Using a single-quoted heredoc (<<'EOF') inside --notes "$()" would
+      # prevent ${TAG} and ${{ }} expressions from expanding — this approach
+      # avoids that bug entirely.
+      - name: Write release notes
+        env:
+          REPOSITORY: ${{ github.repository }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          cat > "$RUNNER_TEMP/release-notes.md" <<EOF
+          ## Apple Pi Diagnostics ${TAG}
+
+          ### How to flash
+          1. Open **Raspberry Pi Imager**
+          2. Click **"Choose OS"** → scroll to the bottom → **"Use custom"**
+          3. Select \`apple-pi-diagnostics.img.xz\` (or paste the download URL)
+          4. Flash to SD card, insert into your Pi and power on
+
+          ### Pi Imager custom URL
+          To add this image to your own Pi Imager list, point it at:
+          \`\`\`
+          ${SERVER_URL}/${REPOSITORY}/releases/download/${TAG}/os_list.json
+          \`\`\`
+
+          ### Supported hardware
+          - Raspberry Pi 4 (all RAM variants)
+          - Raspberry Pi 5
+          EOF
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,26 +135,7 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           gh release create "${TAG}" \
             --title "Apple Pi Diagnostics ${TAG}" \
-            --notes "$(cat <<'EOF'
-          ## Apple Pi Diagnostics ${TAG}
-
-          ### How to flash
-          1. Open **Raspberry Pi Imager**
-          2. Click **"Choose OS"** → scroll to the bottom → **"Use custom"**
-          3. Select `apple-pi-diagnostics.img.xz` (or paste the download URL)
-          4. Flash to SD card, insert into your Pi and power on
-
-          ### Pi Imager custom URL
-          To add this image to your own Pi Imager list, point it at:
-          ```
-          https://raw.githubusercontent.com/${{ github.repository }}/releases/download/${TAG}/os_list.json
-          ```
-
-          ### Supported hardware
-          - Raspberry Pi 4 (all RAM variants)
-          - Raspberry Pi 5
-          EOF
-          )" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             "apple-pi-diagnostics.img.xz" \
             "apple-pi-diagnostics.img.xz.sha256" \
             "os_list.json"

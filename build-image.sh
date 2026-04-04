@@ -216,8 +216,8 @@ PISHRINK="${BUILD_DIR}/pishrink.sh"
 #   1. Pick a commit from https://github.com/Drewsif/PiShrink/commits/master
 #   2. Download it: curl -fsSL "https://raw.githubusercontent.com/Drewsif/PiShrink/<commit>/pishrink.sh" | sha256sum
 #   3. Set both variables below.
-PISHRINK_COMMIT="4a4d899c4e3e35b789f4e0a3706e2c33d001699d"
-PISHRINK_SHA256="4a4ee9a67ce634b3b7a24e63eacac4e8eacbfa38047e96af8e4a3e4b9ea8b6d6"
+PISHRINK_COMMIT="a5f9463c01607ab07402c7e75c9cfd4bb3a0e886"
+PISHRINK_SHA256="71026f0c02ac099e588a3eb8f70760c1b680aa8ea3acde61a0141fbaeb68c777"
 PISHRINK_URL="https://raw.githubusercontent.com/Drewsif/PiShrink/${PISHRINK_COMMIT}/pishrink.sh"
 
 if [ ! -f "${PISHRINK}" ]; then

@@ -1,0 +1,38 @@
+name: ShellCheck
+
+# Lints all shell scripts on every push to main and on pull requests.
+# Catches quoting issues, missing error handling, and unsafe patterns —
+# the same class of bugs addressed in the security hardening pass.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - '**.sh'
+      - 'init'
+      - '.github/workflows/shellcheck.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - '**.sh'
+      - 'init'
+      - '.github/workflows/shellcheck.yml'
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          # Scan all .sh files and the init script
+          scandir: '.'
+          # Treat warnings as errors to keep scripts clean
+          severity: warning
+          # Additional flags: check for external sources, follow sourced files
+          additional_files: 'init'
