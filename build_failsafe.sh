@@ -19,6 +19,7 @@ echo ""
 # Clean previous build
 echo "Cleaning previous build..."
 rm -rf "$BUILD_DIR"
+mkdir -p "$(dirname "$BUILD_DIR")"
 mkdir -p "$BUILD_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,newroot,run,diagnostics/{basic,hardware,network,storage},init,scripts}
 
 # Install Busybox
