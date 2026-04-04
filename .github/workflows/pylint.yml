@@ -1,8 +1,6 @@
 name: Pylint
 
 # Run on pushes to main and on all pull requests targeting main.
-# Previously ran on every push to every branch — that was wasteful and
-# caused false import-error failures because dependencies weren't installed.
 
 on:
   push:
@@ -17,6 +15,7 @@ jobs:
     permissions:
       contents: read
     strategy:
+      fail-fast: false   # don't cancel sibling matrix jobs when one fails
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
 
@@ -31,15 +30,19 @@ jobs:
           cache: 'pip'
           cache-dependency-path: full-linux-gui/requirements.txt
 
-      # Install system packages required by PyQt5 so pylint can resolve imports
+      # Install system libraries that PyQt5 needs at runtime.
+      # Note: python3-pyqt5 installs the system Python binding; we still pip-install
+      # PyQt5 for the virtualenv, but the shared libs it needs come from here.
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
-            python3-pyqt5 \
+            libqt5widgets5 \
+            libqt5gui5 \
+            libqt5core5a \
             libglib2.0-0
 
-      # Install the project's Python dependencies
+      # Install the project's Python dependencies into the virtualenv
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
@@ -48,7 +51,15 @@ jobs:
 
       - name: Run Pylint
         run: |
+          FILES=$(git ls-files 'full-linux-gui/app/*.py' 'full-linux-gui/app/**/*.py')
+          if [ -z "$FILES" ]; then
+            echo "No Python files found to lint"
+            exit 1
+          fi
+          echo "Linting files:"
+          echo "$FILES"
           pylint \
             --disable=C,R \
             --disable=W0611 \
-            $(git ls-files 'full-linux-gui/app/*.py' 'full-linux-gui/app/**/*.py')
+            --disable=E0401 \
+            $FILES

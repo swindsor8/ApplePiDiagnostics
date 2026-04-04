@@ -30,12 +30,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@2.0.0
-        with:
-          # Scan all .sh files and the init script
-          scandir: '.'
-          # Treat warnings as errors to keep scripts clean
-          severity: warning
-          # Additional flags: check for external sources, follow sourced files
-          additional_files: 'init'
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Run ShellCheck on shell scripts
+        run: |
+          find . -name "*.sh" -not -path "./.git/*" \
+            | xargs shellcheck --severity=warning
+
+      - name: Run ShellCheck on init script
+        run: shellcheck --severity=warning init
