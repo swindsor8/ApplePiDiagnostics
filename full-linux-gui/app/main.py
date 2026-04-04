@@ -168,6 +168,121 @@ def _make_svg_pixmap(icon_key, size=20, color="#888888"):
         return None
 
 
+class StartupBanner(QtWidgets.QWidget):
+    """Dismissible banner shown after launch summarising pre-boot check results."""
+
+    AUTO_DISMISS_MS = 8000
+
+    def __init__(self, results, parent=None):
+        super().__init__(parent)
+        self._results = results
+        self._expanded = False
+        self._detail_widget = None
+        self._auto_timer = QtCore.QTimer(self)
+        self._auto_timer.setSingleShot(True)
+        self._auto_timer.timeout.connect(self.hide)
+        self._build_ui()
+
+    def _build_ui(self):
+        passed = sum(1 for r in self._results if r.get("passed"))
+        total = len(self._results)
+        all_ok = passed == total
+
+        if all_ok:
+            bg, border, text_col = "#dcfce7", "#10b981", "#166534"
+            icon = "✓"
+            summary = f"Pre-boot checks: {passed} / {total} passed"
+        else:
+            bg, border, text_col = "#fef9c3", "#f59e0b", "#713f12"
+            icon = "⚠"
+            summary = f"Pre-boot checks: {passed} / {total} passed"
+
+        self._text_col = text_col
+
+        self.setStyleSheet(f"""
+            StartupBanner {{
+                background-color: {bg};
+                border-left: 4px solid {border};
+            }}
+        """)
+
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # --- collapsed row ---
+        row = QtWidgets.QWidget()
+        row.setStyleSheet("background: transparent;")
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(12, 6, 8, 6)
+        row_layout.setSpacing(8)
+
+        icon_lbl = QtWidgets.QLabel(icon)
+        icon_lbl.setStyleSheet(f"font-size: 14px; color: {text_col}; background: transparent;")
+        row_layout.addWidget(icon_lbl)
+
+        summary_lbl = QtWidgets.QLabel(summary)
+        summary_lbl.setStyleSheet(f"font-size: 12px; color: {text_col}; font-weight: 600; background: transparent;")
+        row_layout.addWidget(summary_lbl)
+        row_layout.addStretch()
+
+        btn_style = f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                font-size: 11px;
+                color: {text_col};
+                padding: 2px 6px;
+            }}
+            QPushButton:hover {{ text-decoration: underline; }}
+        """
+
+        self._toggle_btn = QtWidgets.QPushButton("▼ Details")
+        self._toggle_btn.setStyleSheet(btn_style)
+        self._toggle_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self._toggle_btn.clicked.connect(self._toggle_details)
+        row_layout.addWidget(self._toggle_btn)
+
+        close_btn = QtWidgets.QPushButton("✕")
+        close_btn.setStyleSheet(btn_style)
+        close_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        close_btn.clicked.connect(self.hide)
+        row_layout.addWidget(close_btn)
+
+        outer.addWidget(row)
+
+        # --- detail rows (hidden by default) ---
+        self._detail_widget = QtWidgets.QWidget()
+        self._detail_widget.setStyleSheet("background: transparent;")
+        detail_layout = QtWidgets.QVBoxLayout(self._detail_widget)
+        detail_layout.setContentsMargins(36, 0, 12, 8)
+        detail_layout.setSpacing(2)
+
+        for r in self._results:
+            chk_icon = "✓" if r.get("passed") else "⚠"
+            chk_col = "#166534" if r.get("passed") else "#713f12"
+            lbl = QtWidgets.QLabel(f"{chk_icon}  {r['name']}: {r['detail']}")
+            lbl.setStyleSheet(f"font-size: 11px; color: {chk_col}; background: transparent;")
+            detail_layout.addWidget(lbl)
+
+        self._detail_widget.setVisible(False)
+        outer.addWidget(self._detail_widget)
+
+    def _toggle_details(self):
+        self._expanded = not self._expanded
+        self._detail_widget.setVisible(self._expanded)
+        self._toggle_btn.setText("▲ Details" if self._expanded else "▼ Details")
+        self.adjustSize()
+
+    def show(self):
+        super().show()
+        self._auto_timer.start(self.AUTO_DISMISS_MS)
+
+    def hide(self):
+        self._auto_timer.stop()
+        super().hide()
+
+
 class StatusCard(QtWidgets.QWidget):
     """Card widget for displaying diagnostic test status (ASUS MyASus style)"""
     
@@ -291,6 +406,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.results_lock = threading.Lock()
         self.sys_info_card = None
         self.sys_info_labels = []
+        self.startup_banner = None
         self.setWindowTitle("Apple Pi Diagnostics")
         self.setMinimumSize(1000, 700)
         self._build_ui()
@@ -311,7 +427,15 @@ class MainWindow(QtWidgets.QMainWindow):
         # Header bar (ASUS MyASus style)
         header = self._create_header()
         main_layout.addWidget(header)
-        
+
+        # Banner slot — filled by show_startup_banner() after window is shown
+        self._banner_container = QtWidgets.QWidget()
+        self._banner_container.setVisible(False)
+        self._banner_layout = QtWidgets.QVBoxLayout(self._banner_container)
+        self._banner_layout.setContentsMargins(0, 0, 0, 0)
+        self._banner_layout.setSpacing(0)
+        main_layout.addWidget(self._banner_container)
+
         # Create tab widget for pages
         self.tabs = QtWidgets.QTabWidget()
         self._update_tab_style()
@@ -807,6 +931,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 row += 1
         except Exception as e:
             self.statusBar().showMessage(f"Error loading system info: {e}")
+
+    def show_startup_banner(self, results):
+        """Display the pre-boot check results banner below the header."""
+        if not results:
+            return
+        self.startup_banner = StartupBanner(results, parent=self._banner_container)
+        self._banner_layout.addWidget(self.startup_banner)
+        self._banner_container.setVisible(True)
+        self.startup_banner.show()
 
     @QtCore.pyqtSlot()
     def _update_results_display(self):
@@ -1644,16 +1777,19 @@ def main():
     palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor(17, 17, 17))
     app.setPalette(palette)
     
-    # Show splash screen
+    # Show splash screen and collect pre-boot check results
+    startup_check_results = []
     try:
         from gui.splash import SplashScreen
         splash = SplashScreen()
-        splash.exec_and_wait()
+        startup_check_results = splash.exec_and_wait() or []
     except Exception:
         pass
-    
+
     window = MainWindow()
     window.show()
+    if startup_check_results:
+        window.show_startup_banner(startup_check_results)
     sys.exit(app.exec_())
 
 
