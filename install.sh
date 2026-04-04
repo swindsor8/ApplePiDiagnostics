@@ -77,8 +77,12 @@ cd ..
 ./build_failsafe.sh
 
 echo "Creating desktop entry..."
-# Create desktop entry for easy access
-cat > ~/.local/share/applications/apple-pi-diagnostics.desktop << EOF
+# Create desktop entry with restricted permissions (owner-read/write only).
+DESKTOP_FILE="$HOME/.local/share/applications/apple-pi-diagnostics.desktop"
+mkdir -p "$HOME/.local/share/applications"
+(
+  umask 077
+  cat > "$DESKTOP_FILE" << EOF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -89,6 +93,8 @@ Icon=$SCRIPT_DIR/assets/icon.png
 Terminal=false
 Categories=System;HardwareSettings;
 EOF
+)
+chmod 600 "$DESKTOP_FILE"
 
 # Create symbolic link for easy command line access
 mkdir -p ~/.local/bin

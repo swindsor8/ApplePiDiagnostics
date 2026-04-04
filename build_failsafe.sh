@@ -110,7 +110,7 @@ pushd "$BUILD_DIR" > /dev/null
 if command -v cpio >/dev/null; then
     find . -print0 | cpio --null -ov --format=newc 2>/dev/null | gzip -9 > "$OUTPUT_IMG"
     CPIO_SIZE=$(stat -c%s "$OUTPUT_IMG" 2>/dev/null || stat -f%z "$OUTPUT_IMG" 2>/dev/null || echo "unknown")
-    echo "  Archive created: $(numfmt --to=iec-i --suffix=B $CPIO_SIZE 2>/dev/null || echo "${CPIO_SIZE} bytes")"
+    echo "  Archive created: $(numfmt --to=iec-i --suffix=B "$CPIO_SIZE" 2>/dev/null || echo "${CPIO_SIZE} bytes")"
 else
     echo "ERROR: cpio not found. Please install cpio."
     exit 1

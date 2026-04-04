@@ -11,6 +11,13 @@ if [[ $# -lt 1 ]]; then
 fi
 
 DEV="$1"
+
+# Validate device path to prevent injection via malformed paths.
+if [[ ! "$DEV" =~ ^/dev/[a-zA-Z0-9]+$ ]]; then
+  echo "Error: Invalid device path '${DEV}'. Must match /dev/<alphanumeric> (e.g. /dev/sda, /dev/mmcblk0)."
+  exit 2
+fi
+
 BOOTPART="${DEV}1"
 
 echo "Validating SD device: $DEV"

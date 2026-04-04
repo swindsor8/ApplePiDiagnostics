@@ -21,16 +21,17 @@ def get_local_ip():
         return None
 
 class _ThreadedHTTPServer(threading.Thread):
-    def __init__(self, directory, port=8888):
+    def __init__(self, directory, port=8888, bind_address="127.0.0.1"):
         super().__init__(daemon=True)
         self.directory = directory
         self.port = port
+        self.bind_address = bind_address
         self.httpd = None
 
     def run(self):
         handler = http.server.SimpleHTTPRequestHandler
         os.chdir(self.directory)
-        with socketserver.TCPServer(("", self.port), handler) as httpd:
+        with socketserver.TCPServer((self.bind_address, self.port), handler) as httpd:
             self.httpd = httpd
             try:
                 httpd.serve_forever()
@@ -53,8 +54,10 @@ class QRExportManager:
             # fallback to localhost; the user will need to use device IP if phone can't reach it
             ip = "127.0.0.1"
         url = f"http://{ip}:{self.port}/"
-        # start http server thread
-        self.server_thread = _ThreadedHTTPServer(self.report_directory, port=self.port)
+        # start http server thread — bind only to the interface being advertised
+        self.server_thread = _ThreadedHTTPServer(
+            self.report_directory, port=self.port, bind_address=ip or "127.0.0.1"
+        )
         self.server_thread.start()
         # small sleep to allow server to bind
         time.sleep(0.5)

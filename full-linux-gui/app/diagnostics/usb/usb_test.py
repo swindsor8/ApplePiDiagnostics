@@ -37,8 +37,14 @@ def run_usb_speed_test(mount_point: str, file_size_mb: int = 16) -> Dict[str, An
     if not mount_point or not os.path.isdir(mount_point):
         return {"status": "FAIL", "note": "mount_point not found"}
 
+    # Resolve symlinks and validate against trusted mount prefixes to prevent path traversal.
+    resolved = os.path.realpath(mount_point)
+    _TRUSTED_PREFIXES = ("/media/", "/mnt/", "/run/media/")
+    if not any(resolved.startswith(p) for p in _TRUSTED_PREFIXES):
+        return {"status": "FAIL", "note": "mount_point is not under a trusted prefix (/media/, /mnt/, /run/media/)"}
+
     try:
-        fname = os.path.join(mount_point, f"apd_usb_test_{int(time.time())}.bin")
+        fname = os.path.join(resolved, f"apd_usb_test_{int(time.time())}.bin")
         data = b"\xAA" * 1024 * 1024
         t0 = time.time()
         with open(fname, "wb") as f:

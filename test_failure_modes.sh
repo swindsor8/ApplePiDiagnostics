@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Test script for different failure modes in QEMU
 # Tests the failsafe initramfs with various failure scenarios
@@ -39,8 +40,8 @@ test_normal_boot() {
         -serial mon:stdio &
     QEMU_PID=$!
     sleep 5
-    kill $QEMU_PID 2>/dev/null || true
-    wait $QEMU_PID 2>/dev/null || true
+    kill "$QEMU_PID" 2>/dev/null || true
+    wait "$QEMU_PID" 2>/dev/null || true
     echo ""
 }
 
@@ -58,8 +59,8 @@ test_no_storage() {
         -serial mon:stdio &
     QEMU_PID=$!
     sleep 5
-    kill $QEMU_PID 2>/dev/null || true
-    wait $QEMU_PID 2>/dev/null || true
+    kill "$QEMU_PID" 2>/dev/null || true
+    wait "$QEMU_PID" 2>/dev/null || true
     echo ""
 }
 
@@ -68,6 +69,7 @@ test_corrupt_root() {
     echo "-------------------------------------------------------"
     # Create a dummy corrupt filesystem
     TEMP_IMG=$(mktemp)
+    trap 'rm -f "$TEMP_IMG"' EXIT
     dd if=/dev/zero of="$TEMP_IMG" bs=1M count=100 2>/dev/null
     
     $QEMU_CMD \
@@ -82,8 +84,8 @@ test_corrupt_root() {
         -serial mon:stdio &
     QEMU_PID=$!
     sleep 5
-    kill $QEMU_PID 2>/dev/null || true
-    wait $QEMU_PID 2>/dev/null || true
+    kill "$QEMU_PID" 2>/dev/null || true
+    wait "$QEMU_PID" 2>/dev/null || true
     rm -f "$TEMP_IMG"
     echo ""
 }

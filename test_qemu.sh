@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Wrapper to test the failsafe initramfs in QEMU
 # Usage: ./test_qemu.sh [path_to_kernel_image] [options]

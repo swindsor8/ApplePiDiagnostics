@@ -157,23 +157,22 @@ def _test_device_speed(device_path: str, mountpoint: Optional[str] = None,
         os.makedirs(test_dir, exist_ok=True)
         tf = tempfile.NamedTemporaryFile(delete=False, dir=test_dir, suffix=".apd_test")
         fname = tf.name
-        tf.close()
-        
+
         chunk = b"\xAA" * (1024 * 1024)  # 1MB chunks
         chunks = int(file_size_mb)
-        
-        # Write test
+
+        # Write test — write directly through the open handle to avoid TOCTOU race
         if progress_callback:
             progress_callback({"phase": "write", "device": device_path, "progress": 0})
-        
+
         t0 = time.time()
-        with open(fname, "wb") as f:
-            for i in range(chunks):
-                f.write(chunk)
-                f.flush()
-                os.fsync(f.fileno())
-                if progress_callback:
-                    progress_callback({"phase": "write", "device": device_path, "progress": (i + 1) / chunks})
+        for i in range(chunks):
+            tf.write(chunk)
+            tf.flush()
+            os.fsync(tf.fileno())
+            if progress_callback:
+                progress_callback({"phase": "write", "device": device_path, "progress": (i + 1) / chunks})
+        tf.close()
         t1 = time.time()
         write_mb_s = tested_mb / max(1e-6, (t1 - t0))
         

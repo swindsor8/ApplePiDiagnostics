@@ -7,6 +7,7 @@ The main entry point is `build_report(report_data, out_dir, formats)`.
 from __future__ import annotations
 
 from pathlib import Path
+import html
 import json
 import os
 import platform
@@ -54,14 +55,18 @@ def _prepare_logo_for_pdf() -> Optional[str]:
         from PIL import Image
     except Exception:
         return None
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
-    tmp.close()
+    tmp_dir = tempfile.mkdtemp(suffix="_apd_logo")
+    tmp_path = os.path.join(tmp_dir, "logo.png")
     try:
-        Image.open(str(p)).save(tmp.name, format="PNG")
-        return tmp.name
+        Image.open(str(p)).save(tmp_path, format="PNG")
+        return tmp_path
     except Exception:
         try:
-            os.unlink(tmp.name)
+            os.unlink(tmp_path)
+        except Exception:
+            pass
+        try:
+            os.rmdir(tmp_dir)
         except Exception:
             pass
         return None
@@ -329,26 +334,30 @@ def _write_html_report(report: Dict[str, Any], out_path: Path) -> Path:
         return '<span class="badge other">Pending</span>'
 
     def render_card(label: str, status: str, lines: List[str]) -> str:
-        lines_html = "<br>".join(line.replace("  •", "&nbsp;&nbsp;&bull;").replace("  …", "&nbsp;&nbsp;&hellip;") for line in lines)
+        safe_label = html.escape(label)
+        lines_html = "<br>".join(
+            html.escape(line).replace("  •", "&nbsp;&nbsp;&bull;").replace("  …", "&nbsp;&nbsp;&hellip;")
+            for line in lines
+        )
         return (
             f'<div class="card">'
-            f'<div class="card-header"><span class="card-title">{label}</span>{badge(status)}</div>'
+            f'<div class="card-header"><span class="card-title">{safe_label}</span>{badge(status)}</div>'
             f'<div class="lines">{lines_html}</div>'
             f'</div>'
         )
 
     parts = [
         "<!doctype html><html lang=\"en\"><head>",
-        f"<meta charset=\"utf-8\"><title>{title}</title>",
+        f"<meta charset=\"utf-8\"><title>{html.escape(title)}</title>",
         '<meta name="viewport" content="width=device-width,initial-scale=1">',
         f"<style>{css}</style>",
         "</head><body>",
         f"<header>{logo_tag}<div>",
-        f"<h1>{title}</h1>",
-        f'<div class="meta">Generated: {meta.get("generated", "")}',
-        f" &nbsp;|&nbsp; Host: {meta.get('hostname', '')}" if meta.get("hostname") else "",
-        f" &nbsp;|&nbsp; {os_name}" if os_name else "",
-        f" &nbsp;|&nbsp; {pi_model}" if pi_model else "",
+        f"<h1>{html.escape(title)}</h1>",
+        f'<div class="meta">Generated: {html.escape(meta.get("generated", ""))}',
+        f" &nbsp;|&nbsp; Host: {html.escape(meta.get('hostname', ''))}" if meta.get("hostname") else "",
+        f" &nbsp;|&nbsp; {html.escape(os_name)}" if os_name else "",
+        f" &nbsp;|&nbsp; {html.escape(pi_model)}" if pi_model else "",
         "</div></div></header>",
     ]
 
