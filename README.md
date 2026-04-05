@@ -1,4 +1,5 @@
-<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/ff8398de-758f-43fb-a3a5-afffe8baa477" />
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/e01d52fb-471a-48fe-9c54-1ace0a243588" />
+
 
 # ApplePiDiagnostics
 Apple Pi Diagnostics is a complete multi-stage hardware testing and recovery system for Raspberry Pi. It repairs bootloaders, runs failsafe diagnostics when Linux cannot boot, and provides a full GUI for CPU, RAM, storage, network, and GPIO tests with simple export options, including QR codes.
