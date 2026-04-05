@@ -6,6 +6,9 @@ on:
     tags:
       - "v*.*.*"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build flashable image
@@ -140,6 +143,7 @@ jobs:
           gh release create "${TAG}" \
             --title "Apple Pi Diagnostics ${TAG}" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
+            --clobber \
             "apple-pi-diagnostics.img.xz" \
             "apple-pi-diagnostics.img.xz.sha256" \
             "os_list.json"

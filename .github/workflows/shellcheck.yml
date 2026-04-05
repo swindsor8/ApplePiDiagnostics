@@ -18,6 +18,9 @@ on:
       - 'init'
       - '.github/workflows/shellcheck.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   shellcheck:
     name: ShellCheck

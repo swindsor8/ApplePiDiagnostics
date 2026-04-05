@@ -16,6 +16,9 @@ on:
       - 'full-linux-gui/**'
       - '.github/workflows/pytest.yml'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   pytest:
     runs-on: ubuntu-latest

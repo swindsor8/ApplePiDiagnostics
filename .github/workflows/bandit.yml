@@ -20,6 +20,9 @@ on:
     - cron: '0 9 * * 1'   # Weekly Monday 09:00 UTC
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   bandit:
     runs-on: ubuntu-latest
