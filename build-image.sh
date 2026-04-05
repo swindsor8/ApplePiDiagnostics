@@ -31,10 +31,11 @@ OUT_SHA="${OUT_XZ}.sha256"
 BASE_URL="https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-11-19/2024-11-19-raspios-bookworm-arm64-lite.img.xz"
 BASE_XZ="${BUILD_DIR}/base-raspios-lite-arm64.img.xz"
 # Expected SHA256 of the base image (update when upgrading base)
-BASE_SHA256="cf7e84c24995a91acf7e26d9a8eada9ad9c39f00f7d81a6e0bc7c9aef98aa8d5"
+BASE_SHA256="6ac3a10a1f144c7e9d1f8e568d75ca809288280a593eb6ca053e49b539f465a4"
 
-# Extra space to add to the image before chroot (bytes)
-EXTRA_SPACE_MB=2048
+# Extra space to add to the image before chroot.
+# X11 + PyQt5 + Python packages add ~600 MB; 3072 MB gives comfortable headroom.
+EXTRA_SPACE_MB=3072
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -122,8 +123,6 @@ info "Expanding image by ${EXTRA_SPACE_MB} MB..."
 truncate -s "+${EXTRA_SPACE_MB}M" "${WORK_IMG}"
 
 # Extend the root partition to fill the new space
-PART_INFO=$(parted -s "${WORK_IMG}" unit B print | awk '/^ 2/{print $2, $4}')
-PART_START=$(echo "${PART_INFO}" | awk '{print $1}' | tr -d 'B')
 parted -s "${WORK_IMG}" resizepart 2 -- -1s
 
 # ---------------------------------------------------------------------------
@@ -178,6 +177,13 @@ rsync -a --exclude='.git' \
          --exclude='*.img.xz' \
          --exclude='*.sha256' \
          --exclude='full-linux-gui/reports' \
+         --exclude='__pycache__' \
+         --exclude='*.py[cod]' \
+         --exclude='.pytest_cache' \
+         --exclude='coverage.xml' \
+         --exclude='htmlcov' \
+         --exclude='.coverage' \
+         --exclude='full-linux-gui/app/tests' \
          "${SCRIPT_DIR}/" \
          "${MOUNT_ROOT}/opt/apple-pi-diagnostics/"
 

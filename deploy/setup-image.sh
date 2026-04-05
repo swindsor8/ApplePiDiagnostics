@@ -14,9 +14,11 @@ apt-get install -y --no-install-recommends \
     python3-pip \
     python3-pyqt5 \
     python3-pyqt5.qtsvg \
+    python3-rpi.gpio \
     xserver-xorg-core \
     xserver-xorg-input-evdev \
     xserver-xorg-video-fbdev \
+    xserver-xorg-video-modesetting \
     xinit \
     x11-xserver-utils \
     unclutter \
@@ -27,14 +29,19 @@ apt-get install -y --no-install-recommends \
     usbutils \
     lshw \
     libraspberrypi-bin \
-    vcgencmd
+    fonts-dejavu-core \
+    fonts-liberation
+
+# vcgencmd is provided by libraspberrypi-bin (already installed above).
+# reportlab needs TrueType fonts — fonts-dejavu-core and fonts-liberation
+# supply them without requiring the full fonts-noto set.
 
 echo "==> [setup-image] Installing Python packages..."
 pip3 install --break-system-packages --no-cache-dir \
     psutil \
     reportlab \
     Pillow \
-    qrcode
+    "qrcode[pil]"
 
 echo "==> [setup-image] Building failsafe initramfs..."
 cd "${APD_ROOT}"
