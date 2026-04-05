@@ -2,11 +2,11 @@
 set -e
 
 # Configuration
-PROJECT_ROOT="$(dirname $(dirname $(realpath $0)))"
-FAILSAFE_DIR="$PROJECT_ROOT/ApplePiDiagnostics/failsafe-env"
+PROJECT_ROOT="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
+FAILSAFE_DIR="$PROJECT_ROOT/failsafe-env"
 BUILD_DIR="$PROJECT_ROOT/build/failsafe_root"
 OUTPUT_IMG="$PROJECT_ROOT/build/initramfs.cpio.gz"
-INIT_SCRIPT="$PROJECT_ROOT/ApplePiDiagnostics/init"
+INIT_SCRIPT="$PROJECT_ROOT/init"
 
 echo "=========================================="
 echo "Building Failsafe Initramfs"
