@@ -11,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 from copy import deepcopy
 from PyQt5 import QtWidgets, QtCore, QtGui
+from config import GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT, NETWORK_DNS_CHECK_HOST
 from exports.export_usb import save_report_to_usb
 from exports.export_sd_boot import save_report_to_sdboot
 from exports.export_qr import QRExportManager, generate_qr_image
@@ -845,7 +846,7 @@ class MainWindow(QtWidgets.QMainWindow):
             # Get default gateway and local IP
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect(("8.8.8.8", 53))
+                s.connect((GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT))
                 local_ip = s.getsockname()[0]
                 s.close()
                 info_lines.append(f"\n\nLocal IP: {local_ip}")
@@ -856,7 +857,7 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 import time
                 t0 = time.time()
-                socket.gethostbyname("www.google.com")
+                socket.gethostbyname(NETWORK_DNS_CHECK_HOST)
                 dns_time = (time.time() - t0) * 1000
                 info_lines.append(f"DNS Resolution: OK ({dns_time:.0f}ms)")
             except Exception as e:
@@ -1450,7 +1451,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         layout.addLayout(button_layout)
         
-        dialog.exec_()
+        dialog.exec()
     
     def _save_pdf_to_usb(self, pdf_path, dialog):
         """Save PDF to USB drive"""
@@ -1837,7 +1838,7 @@ def main():
     window.show()
     if startup_check_results:
         window.show_startup_banner(startup_check_results)
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

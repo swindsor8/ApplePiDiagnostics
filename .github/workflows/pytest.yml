@@ -1,0 +1,73 @@
+name: Pytest
+
+# Runs the diagnostic module test suite on every push to main and on all PRs.
+# Tests run without real hardware — modules that require GPIO/HDMI/USB return
+# UNSUPPORTED gracefully, so CI passes on a standard Linux runner.
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'full-linux-gui/**'
+      - '.github/workflows/pytest.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'full-linux-gui/**'
+      - '.github/workflows/pytest.yml'
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.11"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: full-linux-gui/requirements-dev.txt
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            libqt5widgets5 \
+            libqt5gui5 \
+            libqt5core5a \
+            libglib2.0-0
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r full-linux-gui/requirements-dev.txt
+
+      - name: Run tests with coverage
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pytest full-linux-gui/app/tests/ \
+            --timeout=60 \
+            --tb=short \
+            -v \
+            --cov=full-linux-gui/app \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          retention-days: 14

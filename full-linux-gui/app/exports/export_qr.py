@@ -8,12 +8,15 @@ import socketserver
 import os
 import time
 
+from config import GATEWAY_PROBE_HOST, QR_HTTP_PORT
+
+
 def get_local_ip():
     # return local IPv4 address or None
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # doesn't have to be reachable
-        s.connect(("8.8.8.8", 80))
+        # doesn't have to be reachable; used only to discover local interface IP
+        s.connect((GATEWAY_PROBE_HOST, 80))
         ip = s.getsockname()[0]
         s.close()
         return ip
@@ -21,7 +24,7 @@ def get_local_ip():
         return None
 
 class _ThreadedHTTPServer(threading.Thread):
-    def __init__(self, directory, port=8888, bind_address="127.0.0.1"):
+    def __init__(self, directory, port=QR_HTTP_PORT, bind_address="127.0.0.1"):
         super().__init__(daemon=True)
         self.directory = directory
         self.port = port
@@ -43,7 +46,7 @@ class _ThreadedHTTPServer(threading.Thread):
             self.httpd.shutdown()
 
 class QRExportManager:
-    def __init__(self, report_directory, port=8888):
+    def __init__(self, report_directory, port=QR_HTTP_PORT):
         self.report_directory = report_directory
         self.port = port
         self.server_thread = None

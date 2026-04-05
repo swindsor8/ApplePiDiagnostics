@@ -7,138 +7,163 @@ This document provides information for developers working on Apple Pi Diagnostic
 ```
 ApplePiDiagnostics/
 ├── bootloader-tools/          # Bootloader repair and validation tools
-├── failsafe-env/            # Files for the failsafe initramfs
-├── full-linux-gui/          # Complete PyQt5-based diagnostic GUI
-│   ├── app/                 # Main application code
-│   │   ├── diagnostics/     # Individual diagnostic modules
-│   │   ├── exports/         # Report export functionality
-│   │   └── gui/            # GUI components
-│   ├── requirements.txt     # Python dependencies
-│   └── reports/            # Generated reports
-├── build_failsafe.sh        # Script to build failsafe initramfs
-├── test_*.sh               # Testing scripts
-└── install.sh              # Installation script for end users
+├── failsafe-env/              # Files for the failsafe initramfs
+├── full-linux-gui/            # Complete PyQt5-based diagnostic GUI
+│   ├── app/
+│   │   ├── config.py          # Centralised constants (network addresses, ports)
+│   │   ├── main.py            # Application entry point
+│   │   ├── diagnostics/       # Individual diagnostic modules
+│   │   ├── exports/           # Report export functionality
+│   │   ├── gui/               # GUI components
+│   │   └── tests/             # Pytest test suite
+│   ├── requirements.txt       # Runtime Python dependencies
+│   ├── requirements-dev.txt   # Dev/test dependencies (pylint, pytest, bandit, mypy)
+│   └── reports/               # Generated reports (gitignored)
+├── scripts/
+│   └── update-pishrink.sh     # Check/apply PiShrink upstream updates
+├── build_failsafe.sh          # Build failsafe initramfs
+├── build-image.sh             # Build flashable Pi image
+├── install.sh                 # End-user setup script
+└── test_*.sh                  # QEMU and failure-mode test scripts
 ```
 
 ## Development Environment Setup
 
-1. Clone the repository
-2. Run `./install.sh` to set up the development environment
-3. The GUI can be run with:
-   ```bash
-   cd full-linux-gui
-   source venv/bin/activate
-   python app/main.py
-   ```
+```bash
+git clone <repo>
+cd ApplePiDiagnostics/full-linux-gui
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements-dev.txt   # installs runtime + dev deps
+```
+
+Run the GUI:
+```bash
+cd app
+python3 main.py
+# headless / offscreen:
+QT_QPA_PLATFORM=offscreen python3 main.py
+```
+
+## Configuration
+
+All hardcoded network addresses and ports live in [`full-linux-gui/app/config.py`](full-linux-gui/app/config.py).
+Change them there — do not scatter literals through module files.
+
+| Constant | Default | Purpose |
+|----------|---------|---------|
+| `GATEWAY_PROBE_HOST` | `8.8.8.8` | UDP socket used to detect local interface IP |
+| `GATEWAY_PROBE_PORT` | `53` | Port for the probe above |
+| `NETWORK_PING_TARGETS` | `["8.8.8.8","1.1.1.1"]` | Hosts pinged by network diagnostic |
+| `NETWORK_DNS_CHECK_HOST` | `www.google.com` | Hostname for DNS latency check |
+| `QR_HTTP_PORT` | `8888` | Port for the QR report HTTP server |
+
+> **Privacy note:** The defaults above contact Google and Cloudflare infrastructure at runtime. Replace with local addresses if that is not acceptable for your deployment.
 
 ## Testing
 
-### Unit Tests
-Individual diagnostic modules can be tested directly:
+### Automated tests (pytest)
+
+```bash
+cd full-linux-gui
+source venv/bin/activate
+pytest app/tests/ -v --timeout=60
+```
+
+With coverage:
+```bash
+pytest app/tests/ --cov=app --cov-report=term-missing
+```
+
+Tests are designed to run without real Pi hardware — modules that require GPIO, HDMI, or USB return `UNSUPPORTED` gracefully.
+
+### Run a single diagnostic module manually
 
 ```bash
 cd full-linux-gui/app
 python3 -c "
 from diagnostics.cpu.cpu_test import run_cpu_quick_test
-result = run_cpu_quick_test()
-print(result)
+import json; print(json.dumps(run_cpu_quick_test(), indent=2))
 "
 ```
 
-### Failsafe Mode Testing
-Test the failsafe initramfs in QEMU:
-```bash
-./test_qemu.sh <path_to_kernel_image>
-```
+Available modules: `cpu`, `ram`, `network`, `storage`, `usb`, `hdmi`, `gpio`.
 
-Test failure modes:
+### Failsafe mode (QEMU)
+
 ```bash
+./build_failsafe.sh
+./test_qemu.sh <path_to_kernel_image>
 ./test_failure_modes.sh <path_to_kernel_image>
 ```
 
-### Real Hardware Testing
-1. Build the initramfs: `./build_failsafe.sh`
-2. Copy to Pi: `scp build/initramfs.cpio.gz pi@<ip>:/boot/`
-3. Configure boot (see FAILSAFE_README.md)
-4. Reboot and observe behavior
+### Real hardware
 
-## Adding New Diagnostic Modules
+1. Build: `./build_failsafe.sh`
+2. Copy: `scp build/initramfs.cpio.gz pi@<ip>:/boot/`
+3. Configure boot per `FAILSAFE_README.md`
 
-1. Create a new directory in `full-linux-gui/app/diagnostics/`
-2. Implement the diagnostic function following the pattern of existing modules
-3. Return a standardized result dictionary with at least:
-   - `status`: 'OK', 'WARNING', or 'FAIL'
-   - Other module-specific data
-4. Add import and call in `full-linux-gui/app/main.py`
+## Adding a New Diagnostic Module
 
-## Report Generation
-
-The report builder (`diagnostics/report_builder.py`) accepts diagnostic results and generates:
-- JSON reports
-- HTML reports  
-- PDF reports
-
-Export functionality is handled by modules in `exports/`:
-- `export_usb.py`: Save to USB drives
-- `export_sd_boot.py`: Save to SD card boot partition
-- `export_qr.py`: Generate QR codes
-
-## Failsafe Mode Development
-
-The failsafe initramfs is built from:
-- `init`: Main init script that runs diagnostics
-- `failsafe-env/`: Additional scripts and utilities
-
-To modify failsafe behavior:
-1. Edit the `init` script or files in `failsafe-env/`
-2. Rebuild with `./build_failsafe.sh`
-3. Test with QEMU before deploying to real hardware
+1. Create `full-linux-gui/app/diagnostics/<name>/` with `__init__.py` and `<name>_test.py`
+2. Implement `run_<name>_quick_test() -> dict` — must include a `"status"` key with value in `{"OK","WARNING","FAIL","UNSUPPORTED"}`
+3. Add import and call in `main.py` (follow the pattern of existing modules)
+4. Add a `Test<Name>` class to `app/tests/test_diagnostics.py`
+5. Register in `gui/splash.py` `_check_diagnostics()` so it validates at startup
 
 ## Code Style
 
-- Follow PEP 8 for Python code
-- Use descriptive variable names
-- Add docstrings to functions and classes
-- Include error handling for external dependencies
+- Python 3.9+ (type hints, `list[str]` syntax)
+- PEP 8; max line length 100
+- All subprocess calls must use list args (`shell=False`)
+- UI updates from threads must use `QtCore.QMetaObject.invokeMethod()`
+- Diagnostic functions must not block the Qt event loop — run in `threading.Thread(daemon=True)`
+- Exception messages in reports/UI must go through `_safe_err()` (strips file paths)
+
+## Linting & Security Scanning
+
+```bash
+# Pylint (warnings as errors for new code)
+pylint --disable=C,R,W0611,E0401 full-linux-gui/app/
+
+# Bandit SAST
+bandit -r full-linux-gui/app/ --severity-level medium
+
+# ShellCheck
+find . -name "*.sh" | xargs shellcheck --severity=warning
+shellcheck init
+```
+
+## CI/CD Workflows
+
+| Workflow | Trigger | Purpose |
+|----------|---------|---------|
+| `pytest.yml` | push/PR to main | Run test suite with coverage |
+| `pylint.yml` | push/PR to main | Python linting (3.9, 3.10, 3.11) |
+| `shellcheck.yml` | push/PR touching .sh/init | Shell script linting |
+| `bandit.yml` | push/PR to main + weekly | Python SAST |
+| `codeql.yml` | push/PR to main + weekly | Semantic vulnerability analysis |
+| `dependency-review.yml` | every PR | Block CVE-bearing deps |
+| `update-pishrink.yml` | weekly + manual | Keep PiShrink pin current |
+| `build-release.yml` | on version tag push | Build + publish Pi image release |
+| `validate-release.yml` | on release published | Verify SHA256 + os_list.json |
+| `stale.yml` | daily | Triage old issues and PRs |
 
 ## Dependencies
 
-### System Dependencies
-- Python 3.8+
-- PyQt5 development packages
-- busybox-static (for failsafe mode)
-- Standard Linux utilities (cpio, gzip, etc.)
+### Runtime
+See `full-linux-gui/requirements.txt` — PyQt5, psutil, reportlab, Pillow, qrcode.
 
-### Python Dependencies
-See `full-linux-gui/requirements.txt`:
-- PyQt5>=5.15
-- qrcode
-- Pillow
-- reportlab
-- psutil
+### Development
+See `full-linux-gui/requirements-dev.txt` — adds pytest, pytest-cov, pylint, bandit, mypy.
 
-## Debugging
-
-### GUI Debugging
-If the GUI fails to start, check:
-1. Python dependencies are installed
-2. Display environment variables (DISPLAY, QT_QPA_PLATFORM)
-3. PyQt5 installation
-
-### Failsafe Mode Debugging
-1. Test in QEMU first
-2. Check init script syntax
-3. Verify busybox is statically linked
-4. Check LED paths for different Pi models
+### System (Debian/Pi OS)
+```bash
+sudo apt install python3-pyqt5 python3-pyqt5.qtsvg busybox-static cpio gzip
+```
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## License
-
-This project is licensed under the terms specified in the LICENSE file.
+1. Fork → feature branch → changes → tests pass → pull request
+2. All PRs are automatically checked by ShellCheck, Pylint, Pytest, Bandit, and Dependency Review
+3. Merging requires all checks to pass

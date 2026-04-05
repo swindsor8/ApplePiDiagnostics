@@ -4,8 +4,16 @@ from __future__ import annotations
 import re
 import socket
 import subprocess
+import sys
 import time
 from typing import Dict, Any, List, Optional
+
+# Import constants — fall back gracefully if run standalone outside the app tree
+try:
+    from config import GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT, NETWORK_PING_TARGETS, NETWORK_DNS_CHECK_HOST
+except ImportError:
+    sys.path.insert(0, str(__import__('pathlib').Path(__file__).parents[2]))
+    from config import GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT, NETWORK_PING_TARGETS, NETWORK_DNS_CHECK_HOST
 
 
 def _safe_err(e: Exception) -> str:
@@ -25,7 +33,7 @@ def _ping_host(host: str, count: int = 2, timeout: int = 2) -> Dict[str, Any]:
         return {"host": host, "ok": False, "note": _safe_err(e)}
 
 
-def run_network_test(targets: Optional[List[str]] = None, dns_check: str = "www.google.com") -> Dict[str, Any]:
+def run_network_test(targets: Optional[List[str]] = None, dns_check: str = NETWORK_DNS_CHECK_HOST) -> Dict[str, Any]:
     """Run basic network connectivity checks.
 
     Privacy note: By default this function sends ICMP ping packets to
@@ -36,7 +44,7 @@ def run_network_test(targets: Optional[List[str]] = None, dns_check: str = "www.
     infrastructure instead.
     """
     if targets is None:
-        targets = ["8.8.8.8", "1.1.1.1"]
+        targets = NETWORK_PING_TARGETS
 
     out = {"status": "OK", "ping": [], "dns": {}}
 
@@ -71,7 +79,7 @@ def run_network_test(targets: Optional[List[str]] = None, dns_check: str = "www.
     gw_ok = False
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 53))
+        s.connect((GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT))
         local_ip = s.getsockname()[0]
         out["local_ip"] = local_ip
         gw_ok = True
