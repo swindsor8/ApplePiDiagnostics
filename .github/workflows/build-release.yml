@@ -147,3 +147,27 @@ jobs:
             "apple-pi-diagnostics.img.xz" \
             "apple-pi-diagnostics.img.xz.sha256" \
             "os_list.json"
+
+      # -----------------------------------------------------------------------
+      # 8. Commit stamped os_list.json back to main
+      #    Gives Pi Imager a stable URL that always reflects the latest release:
+      #    https://raw.githubusercontent.com/<owner>/<repo>/main/os_list.json
+      # -----------------------------------------------------------------------
+      - name: Commit stamped os_list.json to main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fetch and switch to main (the tag checkout is detached HEAD)
+          git fetch origin main
+          git checkout main
+
+          # os_list.json is already stamped in the working tree from step 6
+          git add os_list.json
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+
+          git commit -m "chore: stamp os_list.json for ${TAG} [skip ci]"
+          git push origin main
