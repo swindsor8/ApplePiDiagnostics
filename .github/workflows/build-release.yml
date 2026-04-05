@@ -140,10 +140,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
+          # Delete existing release for this tag if one exists (re-run safe)
+          gh release delete "${TAG}" --yes 2>/dev/null || true
           gh release create "${TAG}" \
             --title "Apple Pi Diagnostics ${TAG}" \
             --notes-file "$RUNNER_TEMP/release-notes.md" \
-            --clobber \
             "apple-pi-diagnostics.img.xz" \
             "apple-pi-diagnostics.img.xz.sha256" \
             "os_list.json"
