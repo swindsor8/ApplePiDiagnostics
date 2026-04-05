@@ -3,7 +3,7 @@
 # Test script for running failsafe diagnostics on actual Raspberry Pi
 # This script helps test the initramfs on real hardware
 
-PROJECT_ROOT="$(dirname $(dirname $(realpath $0)))"
+PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 INITRAMFS="$PROJECT_ROOT/build/initramfs.cpio.gz"
 
 if [ ! -f "$INITRAMFS" ]; then

@@ -34,6 +34,10 @@ def run_gpio_loopback(pin_out: int, pin_in: int, pulses: int = 3, pulse_ms: int 
         return {"status": "UNSUPPORTED", "note": "Loopback tests require explicit allow=True"}
 
     try:
+        GPIO = None
+        out = None
+        inp = None
+        use = "unknown"
         try:
             import RPi.GPIO as GPIO  # type: ignore
             use = "RPi.GPIO"
@@ -52,23 +56,22 @@ def run_gpio_loopback(pin_out: int, pin_in: int, pulses: int = 3, pulse_ms: int 
 
         success = True
         results = []
+        import time as _t
         for i in range(pulses):
-            if 'GPIO' in locals():
+            if GPIO is not None:
                 GPIO.output(pin_out, True)
-                import time as _t
                 _t.sleep(pulse_ms / 1000.0)
                 val = GPIO.input(pin_in)
                 GPIO.output(pin_out, False)
             else:
                 out.on()
-                import time as _t
                 _t.sleep(pulse_ms / 1000.0)
                 val = inp.value
                 out.off()
             results.append(bool(val))
 
         # cleanup for RPi.GPIO
-        if 'GPIO' in locals():
+        if GPIO is not None:
             try:
                 GPIO.cleanup()
             except Exception:

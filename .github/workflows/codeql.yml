@@ -47,9 +47,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-        - language: actions
-          build-mode: none
-          # security-extended is not supported for the actions language
         - language: python
           build-mode: none
           queries: security-extended

@@ -4,7 +4,7 @@ set -euo pipefail
 # Test script for different failure modes in QEMU
 # Tests the failsafe initramfs with various failure scenarios
 
-PROJECT_ROOT="$(dirname $(dirname $(realpath $0)))"
+PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 INITRAMFS="$PROJECT_ROOT/build/initramfs.cpio.gz"
 KERNEL="${1:-$PROJECT_ROOT/build/kernel8.img}"
 QEMU_CMD="qemu-system-aarch64"

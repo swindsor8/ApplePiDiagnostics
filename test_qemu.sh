@@ -4,7 +4,7 @@ set -euo pipefail
 # Wrapper to test the failsafe initramfs in QEMU
 # Usage: ./test_qemu.sh [path_to_kernel_image] [options]
 
-PROJECT_ROOT="$(dirname $(dirname $(realpath $0)))"
+PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
 INITRAMFS="$PROJECT_ROOT/build/initramfs.cpio.gz"
 KERNEL="${1:-$PROJECT_ROOT/build/kernel8.img}"
 GRAPHIC="${2:-nographic}"

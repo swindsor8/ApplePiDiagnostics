@@ -50,7 +50,7 @@ class TestCPU:
         from diagnostics.cpu.cpu_test import run_cpu_quick_test
         result = run_cpu_quick_test()
         if result["status"] == "OK":
-            assert "cpu_percent" in result or "model" in result, (
+            assert "avg_cpu_percent" in result or "per_cpu_percent" in result, (
                 f"CPU OK result missing expected keys: {result}"
             )
 
@@ -204,7 +204,7 @@ class TestReportBuilder:
             "hdmi":    {"status": "OK"},
             "gpio":    {"status": "UNSUPPORTED"},
         }
-        # Should not raise; returns list of created file paths
+        # Should not raise; returns dict of format -> Path
         paths = build_report(dummy_results, str(tmp_path), formats=["html", "json"])
-        assert any(str(p).endswith(".html") for p in paths), "Expected HTML report"
-        assert any(str(p).endswith(".json") for p in paths), "Expected JSON report"
+        assert "html" in paths and str(paths["html"]).endswith(".html"), "Expected HTML report"
+        assert "json" in paths and str(paths["json"]).endswith(".json"), "Expected JSON report"
