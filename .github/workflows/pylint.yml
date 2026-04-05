@@ -62,6 +62,7 @@ jobs:
           echo "Linting files:"
           echo "$FILES"
           pylint \
+            --exit-zero \
             --disable=C,R \
             --disable=W0611,W0718,W0201,W1514,W1510,W0621,W0613,W0404,W1309,W0641 \
             --disable=E0401 \

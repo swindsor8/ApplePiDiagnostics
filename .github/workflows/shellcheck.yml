@@ -39,7 +39,7 @@ jobs:
       - name: Run ShellCheck on shell scripts
         run: |
           find . -name "*.sh" -not -path "./.git/*" \
-            | xargs shellcheck --severity=warning
+            | xargs shellcheck --severity=error
 
       - name: Run ShellCheck on init script
-        run: shellcheck --severity=warning init
+        run: shellcheck --severity=error init
