@@ -44,7 +44,7 @@ jobs:
       # 3. Cache the base Pi OS image to avoid re-downloading on every run
       # -----------------------------------------------------------------------
       - name: Cache base Pi OS image
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: build/base-raspios-lite-arm64.img.xz
           key: base-raspios-lite-arm64-2024-11-19
