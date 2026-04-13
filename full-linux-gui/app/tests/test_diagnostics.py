@@ -138,7 +138,7 @@ class TestUSB:
     def test_speed_test_rejects_bad_path(self):
         """run_usb_speed_test must reject paths outside trusted prefixes."""
         from diagnostics.usb.usb_test import run_usb_speed_test
-        result = run_usb_speed_test("/tmp")
+        result = run_usb_speed_test("/tmp")  # nosec B108 — intentional: verifying /tmp is rejected
         assert result["status"] == "FAIL"
         assert "trusted prefix" in result.get("note", "")
 

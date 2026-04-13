@@ -157,8 +157,8 @@ def _test_device_speed(device_path: str, mountpoint: Optional[str] = None,
             # Test on mounted filesystem
             test_dir = mountpoint
         else:
-            # Use /tmp as fallback (tests system RAM/filesystem, not the device)
-            test_dir = "/tmp"
+            # Use system temp dir as fallback (tests system RAM/filesystem, not the device)
+            test_dir = tempfile.gettempdir()
         
         os.makedirs(test_dir, exist_ok=True)
         tf = tempfile.NamedTemporaryFile(delete=False, dir=test_dir, suffix=".apd_test")

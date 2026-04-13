@@ -11,11 +11,12 @@ import tempfile
 from typing import Callable, Dict, Any, Optional
 
 
-def run_sd_speed_test(target_dir: str = "/tmp", file_size_mb: int = 16, chunk_kb: int = 1024, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+def run_sd_speed_test(target_dir: Optional[str] = None, file_size_mb: int = 16, chunk_kb: int = 1024, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
     """Run a simple sequential write/read speed test.
 
     Returns a dict with status, write_mb_s, read_mb_s, tested_mb.
     """
+    target_dir = target_dir or tempfile.gettempdir()
     tested_mb = float(file_size_mb)
     fname = None
     try:
@@ -62,17 +63,18 @@ def run_sd_speed_test(target_dir: str = "/tmp", file_size_mb: int = 16, chunk_kb
             pass
 
 
-def run_sd_quick_test(target_dir: str = "/tmp", progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+def run_sd_quick_test(target_dir: Optional[str] = None, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
     return run_sd_speed_test(target_dir=target_dir, file_size_mb=4, chunk_kb=1024, progress_callback=progress_callback)
 
 
-def run_sd_random_test(target_dir: str = "/tmp", file_size_mb: int = 8, io_ops: int = 128, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
+def run_sd_random_test(target_dir: Optional[str] = None, file_size_mb: int = 8, io_ops: int = 128, progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None) -> Dict[str, Any]:
     """Perform small random writes and reads inside a temporary file to measure random IO speed.
 
     `file_size_mb` is the backing file size; `io_ops` is the number of random operations.
     """
     import random
 
+    target_dir = target_dir or tempfile.gettempdir()
     tested_mb = float(file_size_mb)
     fname = None
     try:
@@ -113,7 +115,7 @@ def run_sd_random_test(target_dir: str = "/tmp", file_size_mb: int = 8, io_ops: 
             pass
 
 
-def run_sd_full_test(target_dir: str = "/tmp", seq_mb: int = 16, rand_mb: int = 8) -> Dict[str, Any]:
+def run_sd_full_test(target_dir: Optional[str] = None, seq_mb: int = 16, rand_mb: int = 8) -> Dict[str, Any]:
     seq = run_sd_speed_test(target_dir=target_dir, file_size_mb=seq_mb)
     rand = run_sd_random_test(target_dir=target_dir, file_size_mb=rand_mb)
     return {"sequential": seq, "random": rand}
@@ -124,7 +126,7 @@ if __name__ == "__main__":
     import json
 
     p = argparse.ArgumentParser()
-    p.add_argument("--target-dir", default="/tmp")
+    p.add_argument("--target-dir", default=tempfile.gettempdir())
     p.add_argument("--size-mb", type=int, default=4)
     args = p.parse_args()
     res = run_sd_speed_test(target_dir=args.target_dir, file_size_mb=args.size_mb)
