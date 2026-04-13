@@ -70,7 +70,7 @@ fi
 # Activate virtual environment and install packages
 source venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 
 echo "Building failsafe initramfs..."
 cd ..

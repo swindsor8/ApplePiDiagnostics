@@ -167,3 +167,24 @@ sudo apt install python3-pyqt5 python3-pyqt5.qtsvg busybox-static cpio gzip
 1. Fork → feature branch → changes → tests pass → pull request
 2. All PRs are automatically checked by ShellCheck, Pylint, Pytest, Bandit, and Dependency Review
 3. Merging requires all checks to pass
+
+## Branch Protection
+
+The `main` branch should be protected in **GitHub → Settings → Branches → Branch protection rules** with the following settings. These cannot be enforced via code, so they must be configured manually by a repository administrator.
+
+**Recommended settings for `main`:**
+
+| Setting | Value |
+|---------|-------|
+| Require a pull request before merging | ✅ Enabled |
+| Required number of approvals | 1 |
+| Dismiss stale reviews when new commits are pushed | ✅ Enabled |
+| Require status checks to pass before merging | ✅ Enabled |
+| Required status checks | `ci`, `bandit`, `pytest`, `pylint`, `shellcheck`, `dependency-review`, `CodeQL` |
+| Require branches to be up to date before merging | ✅ Enabled |
+| Do not allow bypassing the above settings | ✅ Enabled (applies to admins too) |
+| Restrict who can push to matching branches | ✅ Enabled |
+| Allow force pushes | ❌ Disabled |
+| Allow deletions | ❌ Disabled |
+
+> **Note:** The `ci` check refers to the strict bandit + pip-audit gate in `.github/workflows/ci.yml`. Dependabot is already configured (`.github/dependabot.yml`) to scan both `pip` packages weekly and `github-actions` versions weekly — no additional setup needed.

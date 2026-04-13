@@ -1,0 +1,13 @@
+# Direct runtime dependencies for Apple Pi Diagnostics GUI.
+# Edit this file to change version constraints, then regenerate the lock file:
+#
+#   pip install pip-tools
+#   pip-compile --generate-hashes requirements.in -o requirements.txt
+#
+# Commit both this file and the regenerated requirements.txt.
+
+PyQt5>=5.15
+qrcode
+Pillow
+reportlab
+psutil

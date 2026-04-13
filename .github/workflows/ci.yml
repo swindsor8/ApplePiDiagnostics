@@ -1,0 +1,43 @@
+name: CI
+
+# Strict security gate: fails the build if bandit finds medium+ severity issues
+# in the Python source, or if pip-audit finds known CVEs in requirements.txt.
+#
+# This complements (but does not replace) bandit.yml, which uploads SARIF to
+# the GitHub Security tab for visibility without blocking merges.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  security:
+    name: Security checks (bandit + pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install security tools
+        run: pip install bandit pip-audit
+
+      - name: Run Bandit (fail on medium+ severity)
+        run: bandit -r full-linux-gui/app/ --severity-level medium
+
+      - name: Run pip-audit (fail on known CVEs)
+        run: pip-audit -r full-linux-gui/requirements.txt
