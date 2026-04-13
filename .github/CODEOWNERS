@@ -1,0 +1,11 @@
+# CODEOWNERS — Critical infrastructure files require review from the repo owner.
+# Changes to these paths will automatically request a review from @swindsor8
+# before any PR can be merged.
+# https://docs.github.com/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+/init                @swindsor8
+/install.sh          @swindsor8
+/build_failsafe.sh   @swindsor8
+/build-image.sh      @swindsor8
+/bootloader-tools/   @swindsor8
+/failsafe-env/       @swindsor8

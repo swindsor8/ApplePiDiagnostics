@@ -1,0 +1,70 @@
+name: Release — Failsafe Initramfs
+
+# Triggered by pushing a version tag, e.g.: git tag v1.0.0 && git push --tags
+#
+# Builds the failsafe initramfs (build/initramfs.cpio.gz) and attaches it,
+# along with a SHA256 checksum file, to the GitHub Release for the tag.
+#
+# This workflow runs alongside build-release.yml (which builds the full Pi
+# image). It does NOT delete/recreate the release to avoid a race condition —
+# it creates the release if absent, then uploads artifacts with --clobber so
+# re-runs are safe.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-initramfs:
+    name: Build initramfs and publish release artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write   # required to create/update GitHub Releases
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # build_failsafe.sh requires busybox-static and cpio
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y busybox-static cpio gzip
+
+      - name: Build failsafe initramfs
+        run: |
+          chmod +x build_failsafe.sh
+          ./build_failsafe.sh
+
+      - name: Verify build output
+        run: |
+          [[ -f build/initramfs.cpio.gz ]] \
+            || { echo "ERROR: build/initramfs.cpio.gz not found — build failed"; exit 1; }
+
+      - name: Generate SHA256 checksum
+        run: sha256sum build/initramfs.cpio.gz > build/initramfs.cpio.gz.sha256
+
+      - name: Create GitHub Release (if not already present)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release create "${TAG}" \
+            --title "Apple Pi Diagnostics ${TAG}" \
+            --notes "" \
+            2>/dev/null || true   # no-op if release already exists (e.g. from build-release.yml)
+
+      - name: Upload initramfs artifacts to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          gh release upload "${TAG}" \
+            build/initramfs.cpio.gz \
+            build/initramfs.cpio.gz.sha256 \
+            --clobber   # safe to re-run; overwrites stale assets

@@ -19,6 +19,8 @@ dist/
 
 # Reports (generated at runtime)
 full-linux-gui/reports/
+reports/*
+!reports/.gitkeep
 *.log
 
 # Test & coverage artifacts

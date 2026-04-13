@@ -96,10 +96,22 @@ else
 fi
 
 # Create essential device nodes (if needed)
+# mknod requires root/CAP_MKNOD; warn loudly instead of silently ignoring
+# failures so operators notice when the failsafe environment may not boot.
+_mknod() {
+    local node="$1"; shift
+    [ -c "$node" ] && return 0
+    if ! mknod "$node" "$@" 2>/dev/null; then
+        echo "WARNING: Failed to create device node $node" >&2
+        echo "  The failsafe environment may not boot correctly without it." >&2
+        echo "  Re-run build_failsafe.sh with elevated privileges (sudo)." >&2
+    fi
+}
+
 echo "Creating device nodes..."
-[ -c "$BUILD_DIR/dev/console" ] || mknod "$BUILD_DIR/dev/console" c 5 1 2>/dev/null || true
-[ -c "$BUILD_DIR/dev/null" ] || mknod "$BUILD_DIR/dev/null" c 1 3 2>/dev/null || true
-[ -c "$BUILD_DIR/dev/zero" ] || mknod "$BUILD_DIR/dev/zero" c 1 5 2>/dev/null || true
+_mknod "$BUILD_DIR/dev/console" c 5 1
+_mknod "$BUILD_DIR/dev/null"    c 1 3
+_mknod "$BUILD_DIR/dev/zero"    c 1 5
 
 # Create CPIO Archive
 echo "Creating CPIO archive..."
@@ -111,6 +123,8 @@ if command -v cpio >/dev/null; then
     find . -print0 | cpio --null -ov --format=newc 2>/dev/null | gzip -9 > "$OUTPUT_IMG"
     CPIO_SIZE=$(stat -c%s "$OUTPUT_IMG" 2>/dev/null || stat -f%z "$OUTPUT_IMG" 2>/dev/null || echo "unknown")
     echo "  Archive created: $(numfmt --to=iec-i --suffix=B "$CPIO_SIZE" 2>/dev/null || echo "${CPIO_SIZE} bytes")"
+    sha256sum "$OUTPUT_IMG" > "${OUTPUT_IMG}.sha256"
+    echo "  Checksum:        ${OUTPUT_IMG}.sha256"
 else
     echo "ERROR: cpio not found. Please install cpio."
     exit 1
@@ -122,7 +136,11 @@ echo ""
 echo "=========================================="
 echo "SUCCESS! Initramfs created at:"
 echo "  $OUTPUT_IMG"
+echo "  ${OUTPUT_IMG}.sha256"
 echo "=========================================="
+echo ""
+echo "IMPORTANT: Verify the checksum before deploying to hardware:"
+echo "  sha256sum -c ${OUTPUT_IMG}.sha256"
 echo ""
 echo "To test in QEMU, run:"
 echo "  ./ApplePiDiagnostics/test_qemu.sh <kernel_image>"
