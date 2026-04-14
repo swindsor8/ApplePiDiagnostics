@@ -39,7 +39,7 @@ jobs:
       - name: Build failsafe initramfs
         run: |
           chmod +x build_failsafe.sh
-          ./build_failsafe.sh
+          sudo ./build_failsafe.sh
 
       - name: Verify build output
         run: |

@@ -47,7 +47,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build/base-raspios-lite-arm64.img.xz
-          key: base-raspios-lite-arm64-2024-11-19
+          key: base-raspios-lite-arm64-2025-05-13
 
       # -----------------------------------------------------------------------
       # 4. Build the image

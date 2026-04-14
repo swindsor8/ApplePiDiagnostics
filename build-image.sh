@@ -27,11 +27,11 @@ OUT_IMG="${SCRIPT_DIR}/apple-pi-diagnostics.img"
 OUT_XZ="${OUT_IMG}.xz"
 OUT_SHA="${OUT_XZ}.sha256"
 
-# Base image — Raspberry Pi OS Lite 64-bit (Bookworm)
-BASE_URL="https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2024-11-19/2024-11-19-raspios-bookworm-arm64-lite.img.xz"
+# Base image — Raspberry Pi OS Lite 64-bit (Bookworm) 2025-05-13
+BASE_URL="https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2025-05-13/2025-05-13-raspios-bookworm-arm64-lite.img.xz"
 BASE_XZ="${BUILD_DIR}/base-raspios-lite-arm64.img.xz"
-# Expected SHA256 of the base image (update when upgrading base)
-BASE_SHA256="6ac3a10a1f144c7e9d1f8e568d75ca809288280a593eb6ca053e49b539f465a4"
+# SHA256 is fetched from the Pi servers alongside the image (see Step 1)
+# so this script stays correct without manual hash updates on every release bump.
 
 # Extra space to add to the image before chroot.
 # X11 + PyQt5 + Python packages add ~600 MB; 3072 MB gives comfortable headroom.
@@ -101,13 +101,18 @@ else
     info "Base image already cached at ${BASE_XZ}"
 fi
 
-info "Verifying base image SHA256..."
-echo "${BASE_SHA256}  ${BASE_XZ}" | sha256sum -c - || {
+info "Verifying base image SHA256 (fetching checksum from Pi servers)..."
+wget -q -O "${BASE_XZ}.sha256" "${BASE_URL}.sha256" \
+    || die "Failed to download SHA256 file from ${BASE_URL}.sha256"
+EXPECTED_SHA256=$(awk '{print $1}' "${BASE_XZ}.sha256")
+echo "${EXPECTED_SHA256}  ${BASE_XZ}" | sha256sum -c - || {
     info "WARNING: SHA256 mismatch — re-downloading base image..."
     rm -f "${BASE_XZ}"
     wget --show-progress -O "${BASE_XZ}" "${BASE_URL}"
-    echo "${BASE_SHA256}  ${BASE_XZ}" | sha256sum -c - || die "Base image SHA256 verification failed after re-download."
+    echo "${EXPECTED_SHA256}  ${BASE_XZ}" | sha256sum -c - \
+        || die "Base image SHA256 verification failed after re-download."
 }
+rm -f "${BASE_XZ}.sha256"
 
 # ---------------------------------------------------------------------------
 # Step 2: Decompress to working image
