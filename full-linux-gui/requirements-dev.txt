@@ -5,7 +5,7 @@
 
 # Testing
 pytest>=7.4
-pytest-cov>=4.1       # coverage reporting
+pytest-cov>=7.1.0       # coverage reporting
 pytest-timeout>=2.1   # per-test timeouts
 
 # Linting & formatting
