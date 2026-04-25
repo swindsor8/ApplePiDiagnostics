@@ -10,7 +10,7 @@ pytest-timeout>=2.1   # per-test timeouts
 
 # Linting & formatting
 pylint>=3.0
-bandit[sarif]>=1.7
+bandit[sarif]>=1.9.4
 
 # Type checking
 mypy>=1.5
