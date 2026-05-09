@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Dependency Review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5
         with:
           # Fail the job if any dependency with moderate, high, or critical
           # severity is introduced by this PR.
