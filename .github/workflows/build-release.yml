@@ -22,7 +22,7 @@ jobs:
       # 1. Checkout
       # -----------------------------------------------------------------------
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # -----------------------------------------------------------------------
       # 2. Install host-side build dependencies

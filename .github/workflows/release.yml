@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       # build_failsafe.sh requires busybox-static and cpio
       - name: Install build dependencies
