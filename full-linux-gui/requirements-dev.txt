@@ -17,4 +17,4 @@ mypy>=1.5
 
 # Dependency management — regenerate requirements.txt with:
 #   pip-compile --generate-hashes requirements.in -o requirements.txt
-pip-tools>=7.0
+pip-tools>=7.6.0
