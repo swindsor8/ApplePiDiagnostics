@@ -13,7 +13,7 @@ pylint>=3.0
 bandit[sarif]>=1.7
 
 # Type checking
-mypy>=1.5
+mypy>=2.3.1
 
 # Dependency management — regenerate requirements.txt with:
 #   pip-compile --generate-hashes requirements.in -o requirements.txt
