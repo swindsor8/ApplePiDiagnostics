@@ -9,7 +9,7 @@ pytest-cov>=4.1       # coverage reporting
 pytest-timeout>=2.1   # per-test timeouts
 
 # Linting & formatting
-pylint>=3.0
+pylint>=4.0.8
 bandit[sarif]>=1.7
 
 # Type checking
