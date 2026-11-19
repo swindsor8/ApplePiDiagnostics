@@ -1,7 +1,9 @@
 # Development and testing dependencies — not required at runtime.
-# Install with: pip install -r requirements-dev.txt
-
--r requirements.txt
+# Install runtime deps first, then dev deps:
+#   pip install --require-hashes -r requirements.txt
+#   pip install -r requirements-dev.txt
+# (Kept separate from requirements.txt because pip enables global hash-checking
+#  whenever any file in a single invocation contains --hash= entries.)
 
 # Testing
 pytest>=9.2.0

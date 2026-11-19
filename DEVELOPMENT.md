@@ -34,7 +34,8 @@ git clone <repo>
 cd ApplePiDiagnostics/full-linux-gui
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements-dev.txt   # installs runtime + dev deps
+pip install --require-hashes -r requirements.txt
+pip install -r requirements-dev.txt   # installs dev/test deps
 ```
 
 Run the GUI:

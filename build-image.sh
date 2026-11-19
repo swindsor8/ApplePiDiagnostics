@@ -49,7 +49,11 @@ require_root() {
 
 check_deps() {
     local missing=()
-    for cmd in losetup kpartx qemu-aarch64-static parted resize2fs rsync wget xz sha256sum; do
+    local deps=(losetup kpartx parted resize2fs rsync wget xz sha256sum)
+    if [ "$(uname -m)" != "aarch64" ]; then
+        deps+=(qemu-aarch64-static)
+    fi
+    for cmd in "${deps[@]}"; do
         command -v "$cmd" &>/dev/null || missing+=("$cmd")
     done
     if [ ${#missing[@]} -gt 0 ]; then
@@ -171,10 +175,14 @@ mkdir -p "${MOUNT_ROOT}/boot/firmware"
 mount --bind "${MOUNT_BOOT}" "${MOUNT_ROOT}/boot/firmware"
 
 # ---------------------------------------------------------------------------
-# Step 6: Set up QEMU for ARM64 emulation
+# Step 6: Set up QEMU for ARM64 emulation (only when cross-building on non-ARM64)
 # ---------------------------------------------------------------------------
-info "Copying qemu-aarch64-static for chroot emulation..."
-cp "$(command -v qemu-aarch64-static)" "${MOUNT_ROOT}/usr/bin/qemu-aarch64-static"
+if [ "$(uname -m)" != "aarch64" ]; then
+    info "Copying qemu-aarch64-static for chroot emulation..."
+    cp "$(command -v qemu-aarch64-static)" "${MOUNT_ROOT}/usr/bin/qemu-aarch64-static"
+else
+    info "Running natively on aarch64 — skipping QEMU emulation setup."
+fi
 
 # Bind-mount kernel filesystems into chroot
 for fs in proc sys dev dev/pts; do

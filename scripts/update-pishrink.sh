@@ -40,8 +40,12 @@ info "Currently pinned commit: $CURRENT_COMMIT"
 
 # ── Fetch the latest commit SHA from GitHub API ───────────────────────────────
 info "Checking GitHub for latest PiShrink commit..."
+CURL_HEADERS=(-H "Accept: application/vnd.github.v3+json")
+if [[ -n "${GH_TOKEN:-}" ]]; then
+    CURL_HEADERS+=(-H "Authorization: Bearer ${GH_TOKEN}")
+fi
 LATEST_COMMIT="$(curl -fsSL \
-    -H "Accept: application/vnd.github.v3+json" \
+    "${CURL_HEADERS[@]}" \
     "https://api.github.com/repos/Drewsif/PiShrink/commits/master" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['sha'])")"
 

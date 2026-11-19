@@ -32,6 +32,8 @@ jobs:
           echo "commit=${commit}" >> "$GITHUB_OUTPUT"
 
       - name: Run update-pishrink script
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x scripts/update-pishrink.sh
           ./scripts/update-pishrink.sh
@@ -67,6 +69,11 @@ jobs:
         run: |
           BRANCH="chore/pishrink-${NEW_COMMIT:0:12}"
 
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number')" ]; then
+            echo "An open PR already exists for branch $BRANCH. Nothing to do."
+            exit 0
+          fi
+
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
@@ -77,7 +84,7 @@ jobs:
           New commit: ${NEW_COMMIT}
           New SHA256: ${NEW_SHA256}"
 
-          git push origin "$BRANCH"
+          git push --force-with-lease origin "$BRANCH"
 
           gh pr create \
             --title "chore: update PiShrink pin to ${NEW_COMMIT:0:12}" \
@@ -100,4 +107,8 @@ jobs:
           EOF
           )" \
             --base main \
-            --label "dependencies"
+            --label "dependencies" || \
+          gh pr create \
+            --title "chore: update PiShrink pin to ${NEW_COMMIT:0:12}" \
+            --body "Automated PiShrink pin update from \`${OLD_COMMIT}\` to \`${NEW_COMMIT}\` (SHA256 \`${NEW_SHA256}\`)." \
+            --base main

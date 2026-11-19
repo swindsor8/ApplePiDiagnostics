@@ -32,26 +32,32 @@ jobs:
           gh release download "${TAG}" \
             --pattern "apple-pi-diagnostics.img.xz" \
             --pattern "apple-pi-diagnostics.img.xz.sha256" \
+            --pattern "initramfs.cpio.gz" \
+            --pattern "initramfs.cpio.gz.sha256" \
             --pattern "os_list.json"
 
-      - name: Verify SHA256 checksum
+      - name: Verify SHA256 checksums
         run: |
-          EXPECTED=$(awk '{print $1}' apple-pi-diagnostics.img.xz.sha256)
-          ACTUAL=$(sha256sum apple-pi-diagnostics.img.xz | awk '{print $1}')
-          if [ "$EXPECTED" != "$ACTUAL" ]; then
-            echo "::error::SHA256 MISMATCH on apple-pi-diagnostics.img.xz"
-            echo "  Expected: $EXPECTED"
-            echo "  Actual:   $ACTUAL"
-            exit 1
-          fi
-          echo "SHA256 verified OK: $ACTUAL"
+          for asset in apple-pi-diagnostics.img.xz initramfs.cpio.gz; do
+            EXPECTED=$(awk '{print $1}' "${asset}.sha256")
+            ACTUAL=$(sha256sum "${asset}" | awk '{print $1}')
+            if [ "$EXPECTED" != "$ACTUAL" ]; then
+              echo "::error::SHA256 MISMATCH on ${asset}"
+              echo "  Expected: $EXPECTED"
+              echo "  Actual:   $ACTUAL"
+              exit 1
+            fi
+            echo "SHA256 verified OK (${asset}): $ACTUAL"
+          done
 
       - name: Validate os_list.json
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
           python3 - <<'EOF'
-          import json, sys
+          import json, os
 
-          with open("os_list.json") as f:
+          with open("os_list.json", encoding="utf-8") as f:
               data = json.load(f)
 
           assert "os_list" in data, "Missing top-level 'os_list' key"
@@ -62,14 +68,17 @@ jobs:
           for field in required_fields:
               assert field in entry, f"Missing required field: '{field}'"
 
-          # Verify placeholder values were replaced during the build
+          # Verify placeholder values were replaced and URL matches this release tag
+          tag = os.environ["TAG"]
           assert entry["url"] != "RELEASE_URL_PLACEHOLDER", \
               "url field still contains placeholder — stamping failed"
+          assert f"/releases/download/{tag}/" in entry["url"], \
+              f"url '{entry['url']}' does not point to tag '{tag}'"
           assert entry["sha256sum"] != "SHA256_PLACEHOLDER", \
               "sha256sum field still contains placeholder — stamping failed"
-          assert entry["extract_size"] != 0, \
+          assert entry["extract_size"] > 0, \
               "extract_size is 0 — stamping failed"
-          assert entry["image_download_size"] != 0, \
+          assert entry["image_download_size"] > 0, \
               "image_download_size is 0 — stamping failed"
           assert entry["release_date"] != "RELEASE_DATE_PLACEHOLDER", \
               "release_date field still contains placeholder — stamping failed"

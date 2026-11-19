@@ -1,6 +1,9 @@
 name: Build & Release Pi Image
 
-# Triggered by pushing a version tag, e.g.: git tag v0.1.0 && git push --tags
+# Triggered by pushing a version tag, e.g.: git tag v1.1.4 && git push --tags
+# Builds both the flashable Pi OS image (apple-pi-diagnostics.img.xz) and the
+# ARM64 failsafe initramfs (initramfs.cpio.gz) natively on ARM64, stamps
+# os_list.json, and publishes all release assets atomically in a single release.
 on:
   push:
     tags:
@@ -11,11 +14,11 @@ env:
 
 jobs:
   build:
-    name: Build flashable image
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
+    name: Build flashable image & ARM64 initramfs
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
     permissions:
-      contents: write   # needed to create GitHub Releases
+      contents: write   # needed to create GitHub Releases and stamp os_list.json
 
     steps:
       # -----------------------------------------------------------------------
@@ -25,20 +28,21 @@ jobs:
         uses: actions/checkout@v6
 
       # -----------------------------------------------------------------------
-      # 2. Install host-side build dependencies
+      # 2. Install host-side build dependencies (native ARM64 — no QEMU needed)
       # -----------------------------------------------------------------------
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             kpartx \
-            qemu-user-static \
-            binfmt-support \
             xz-utils \
             parted \
             e2fsprogs \
             rsync \
-            wget
+            wget \
+            busybox-static \
+            cpio \
+            gzip
 
       # -----------------------------------------------------------------------
       # 3. Cache the base Pi OS image to avoid re-downloading on every run
@@ -50,15 +54,29 @@ jobs:
           key: base-raspios-lite-arm64-2025-05-13
 
       # -----------------------------------------------------------------------
-      # 4. Build the image
+      # 4. Build ARM64 failsafe initramfs
+      # -----------------------------------------------------------------------
+      - name: Build ARM64 failsafe initramfs
+        run: |
+          chmod +x build_failsafe.sh
+          sudo ./build_failsafe.sh
+          sudo chown -R "$(id -u):$(id -g)" build
+          [[ -f build/initramfs.cpio.gz ]] \
+            || { echo "ERROR: build/initramfs.cpio.gz not found"; exit 1; }
+          [[ -f build/initramfs.cpio.gz.sha256 ]] \
+            || { echo "ERROR: build/initramfs.cpio.gz.sha256 not found"; exit 1; }
+
+      # -----------------------------------------------------------------------
+      # 5. Build the flashable Pi image (native ARM64 chroot)
       # -----------------------------------------------------------------------
       - name: Build apple-pi-diagnostics image
         run: |
           chmod +x build-image.sh
           sudo ./build-image.sh
+          sudo chown -R "$(id -u):$(id -g)" build apple-pi-diagnostics.img*
 
       # -----------------------------------------------------------------------
-      # 5. Read output metadata
+      # 6. Read output metadata
       # -----------------------------------------------------------------------
       - name: Read build metadata
         id: meta
@@ -81,7 +99,7 @@ jobs:
           echo "release_date=${RELEASE_DATE}" >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 6. Stamp os_list.json with real values
+      # 7. Stamp os_list.json with real values
       # -----------------------------------------------------------------------
       - name: Stamp os_list.json
         env:
@@ -108,17 +126,13 @@ jobs:
               json.dump(data, f, indent=2)
               f.write("\n")
           PYEOF
+          cp os_list.json "$RUNNER_TEMP/os_list.json"
           echo "--- stamped os_list.json ---"
           cat os_list.json
 
       # -----------------------------------------------------------------------
-      # 7. Create GitHub Release and attach assets
+      # 8. Create or update GitHub Release and upload all assets atomically
       # -----------------------------------------------------------------------
-
-      # Write release notes to a file so variables expand correctly.
-      # Using a single-quoted heredoc (<<'EOF') inside --notes "$()" would
-      # prevent ${TAG} and ${{ }} expressions from expanding — this approach
-      # avoids that bug entirely.
       - name: Write release notes
         env:
           REPOSITORY: ${{ github.repository }}
@@ -132,7 +146,8 @@ jobs:
           1. Open **Raspberry Pi Imager**
           2. Click **"Choose OS"** → scroll to the bottom → **"Use custom"**
           3. Select \`apple-pi-diagnostics.img.xz\` (or paste the download URL)
-          4. Flash to SD card, insert into your Pi and power on
+          4. Choose **No** when prompted for OS customisation settings
+          5. Flash to SD card, insert into your Pi and power on
 
           ### Pi Imager custom URL
           To add this image to your own Pi Imager list, point it at:
@@ -140,29 +155,45 @@ jobs:
           ${SERVER_URL}/${REPOSITORY}/releases/download/${TAG}/os_list.json
           \`\`\`
 
+          ### Included assets
+          - \`apple-pi-diagnostics.img.xz\` (+ \`.sha256\`) — flashable Raspberry Pi OS Bookworm 64-bit diagnostic image
+          - \`initramfs.cpio.gz\` (+ \`.sha256\`) — standalone ARM64 failsafe initramfs
+          - \`os_list.json\` — Raspberry Pi Imager manifest
+
           ### Supported hardware
           - Raspberry Pi 4 (all RAM variants)
           - Raspberry Pi 5
           EOF
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          # Delete existing release for this tag if one exists (re-run safe)
-          gh release delete "${TAG}" --yes 2>/dev/null || true
-          gh release create "${TAG}" \
-            --title "Apple Pi Diagnostics ${TAG}" \
-            --notes-file "$RUNNER_TEMP/release-notes.md" \
-            "apple-pi-diagnostics.img.xz" \
-            "apple-pi-diagnostics.img.xz.sha256" \
-            "os_list.json"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release edit "${TAG}" \
+              --title "Apple Pi Diagnostics ${TAG}" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release upload "${TAG}" \
+              "apple-pi-diagnostics.img.xz" \
+              "apple-pi-diagnostics.img.xz.sha256" \
+              "os_list.json" \
+              "build/initramfs.cpio.gz" \
+              "build/initramfs.cpio.gz.sha256" \
+              --clobber
+          else
+            gh release create "${TAG}" \
+              --title "Apple Pi Diagnostics ${TAG}" \
+              --notes-file "$RUNNER_TEMP/release-notes.md" \
+              "apple-pi-diagnostics.img.xz" \
+              "apple-pi-diagnostics.img.xz.sha256" \
+              "os_list.json" \
+              "build/initramfs.cpio.gz" \
+              "build/initramfs.cpio.gz.sha256"
+          fi
 
       # -----------------------------------------------------------------------
-      # 8. Commit stamped os_list.json back to main
-      #    Gives Pi Imager a stable URL that always reflects the latest release:
-      #    https://raw.githubusercontent.com/<owner>/<repo>/main/os_list.json
+      # 9. Commit stamped os_list.json back to main
       # -----------------------------------------------------------------------
       - name: Commit stamped os_list.json to main
         env:
@@ -172,11 +203,10 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Fetch and switch to main (the tag checkout is detached HEAD)
           git fetch origin main
-          git checkout main
+          git checkout -f -B main origin/main
 
-          # os_list.json is already stamped in the working tree from step 6
+          cp "$RUNNER_TEMP/os_list.json" os_list.json
           git add os_list.json
           git diff --cached --quiet && echo "No changes to commit" && exit 0
 
