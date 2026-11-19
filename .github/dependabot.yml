@@ -12,6 +12,9 @@ updates:
     labels:
       - "dependencies"
       - "python"
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
 
   # GitHub Actions — keep all workflow action versions up to date
   - package-ecosystem: "github-actions"
