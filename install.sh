@@ -35,7 +35,7 @@ if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]] || [[ "$OS" == *"Raspb
     
     # Install required packages
     sudo apt install -y python3 python3-pip python3-venv python3-dev
-    sudo apt install -y PyQt5-dev python3-pyqt5 python3-pyqt5.qtsvg
+    sudo apt install -y pyqt5-dev python3-pyqt5 python3-pyqt5.qtsvg
     sudo apt install -y busybox-static cpio gzip
     sudo apt install -y qrencode  # For QR code generation
     sudo apt install -y usbutils  # For USB device detection
@@ -43,7 +43,7 @@ if [[ "$OS" == *"Ubuntu"* ]] || [[ "$OS" == *"Debian"* ]] || [[ "$OS" == *"Raspb
     sudo apt install -y lm-sensors # For temperature monitoring
     
     # Install optional packages for better functionality
-    sudo apt install -y python3-psutil python3-pil python3-reportlab
+    sudo apt install -y python3-psutil python3-pil python3-reportlab python3-qrcode || true
     
 else
     echo "Unsupported OS: $OS"
@@ -61,16 +61,21 @@ cd "$SCRIPT_DIR"
 
 echo "Installing Python dependencies..."
 
-# Create virtual environment for GUI
+# Create virtual environment for GUI (inherit system PyQt5 on ARM/Pi where PyPI has no wheels)
 cd full-linux-gui
 if [ ! -d "venv" ]; then
-    python3 -m venv venv
+    python3 -m venv --system-site-packages venv
 fi
 
 # Activate virtual environment and install packages
+# shellcheck source=/dev/null
 source venv/bin/activate
 pip install --upgrade pip
-pip install --require-hashes -r requirements.txt
+if python3 -c "import PyQt5" 2>/dev/null; then
+    pip install psutil reportlab Pillow "qrcode[pil]"
+else
+    pip install --require-hashes -r requirements.txt
+fi
 
 echo "Building failsafe initramfs..."
 cd ..
@@ -89,16 +94,20 @@ Type=Application
 Name=Apple Pi Diagnostics
 Comment=Complete hardware diagnostic and recovery system for Raspberry Pi
 Exec=$SCRIPT_DIR/full-linux-gui/venv/bin/python $SCRIPT_DIR/full-linux-gui/app/main.py
-Icon=$SCRIPT_DIR/assets/icon.png
+Icon=$SCRIPT_DIR/assets/apple_pi_logo.png
 Terminal=false
 Categories=System;HardwareSettings;
 EOF
 )
 chmod 600 "$DESKTOP_FILE"
 
-# Create symbolic link for easy command line access
-mkdir -p ~/.local/bin
-ln -sf "$SCRIPT_DIR/full-linux-gui/venv/bin/python" ~/.local/bin/apd-gui 2>/dev/null || true
+# Create launcher script for easy command line access
+mkdir -p "$HOME/.local/bin"
+cat > "$HOME/.local/bin/apd-gui" << EOF
+#!/bin/sh
+exec "$SCRIPT_DIR/full-linux-gui/venv/bin/python" "$SCRIPT_DIR/full-linux-gui/app/main.py" "\$@"
+EOF
+chmod +x "$HOME/.local/bin/apd-gui"
 
 echo ""
 echo "=========================================="
@@ -107,15 +116,15 @@ echo "=========================================="
 echo ""
 echo "To run Apple Pi Diagnostics:"
 echo "  GUI:    Launch 'Apple Pi Diagnostics' from your application menu"
-echo "          or run: $SCRIPT_DIR/full-linux-gui/venv/bin/python $SCRIPT_DIR/full-linux-gui/app/main.py"
+echo "          or run: apd-gui"
 echo ""
 echo "  Failsafe: The initramfs is built and ready at:"
 echo "          $SCRIPT_DIR/build/initramfs.cpio.gz"
 echo ""
-echo "To test failsafe mode on a Raspberry Pi:"
-echo "  1. Copy build/initramfs.cpio.gz to /boot/ on your Pi"
-echo "  2. Add 'initramfs initramfs.cpio.gz followkernel' to /boot/config.txt"
-echo "  3. Add 'rdinit=/init' to /boot/cmdline.txt"
+echo "To test failsafe mode on a Raspberry Pi (Bookworm uses /boot/firmware; older OSes use /boot):"
+echo "  1. Copy build/initramfs.cpio.gz to /boot/firmware/ on your Pi"
+echo "  2. Add 'initramfs initramfs.cpio.gz followkernel' to /boot/firmware/config.txt"
+echo "  3. Add 'rdinit=/init' to /boot/firmware/cmdline.txt"
 echo "  4. Reboot the Pi"
 echo ""
 echo "For more information, see README.md and FAILSAFE_README.md"

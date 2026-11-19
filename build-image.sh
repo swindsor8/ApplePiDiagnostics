@@ -59,16 +59,27 @@ check_deps() {
 
 cleanup() {
     info "Cleaning up mounts..."
-    # Unmount bind mounts inside chroot
-    for fs in dev/pts dev proc sys; do
-        umount -lf "${MOUNT_ROOT}/${fs}" 2>/dev/null || true
+    sync 2>/dev/null || true
+    # Unmount bind mounts inside chroot in reverse order
+    for fs in dev/pts dev proc sys boot/firmware; do
+        if mountpoint -q "${MOUNT_ROOT}/${fs}" 2>/dev/null; then
+            umount "${MOUNT_ROOT}/${fs}" 2>/dev/null || umount -lf "${MOUNT_ROOT}/${fs}" 2>/dev/null || true
+        fi
     done
-    # Unmount partitions
-    umount -lf "${MOUNT_BOOT}" 2>/dev/null || true
-    umount -lf "${MOUNT_ROOT}" 2>/dev/null || true
+    # Unmount partitions cleanly before detaching loop device
+    sync 2>/dev/null || true
+    if mountpoint -q "${MOUNT_BOOT}" 2>/dev/null; then
+        umount "${MOUNT_BOOT}" 2>/dev/null || umount -lf "${MOUNT_BOOT}" 2>/dev/null || true
+    fi
+    if mountpoint -q "${MOUNT_ROOT}" 2>/dev/null; then
+        umount "${MOUNT_ROOT}" 2>/dev/null || umount -lf "${MOUNT_ROOT}" 2>/dev/null || true
+    fi
+    sync 2>/dev/null || true
     # Remove device maps
-    kpartx -d "${LOOP_DEV}" 2>/dev/null || true
-    losetup -d "${LOOP_DEV}" 2>/dev/null || true
+    if [ -n "${LOOP_DEV}" ]; then
+        kpartx -d "${LOOP_DEV}" 2>/dev/null || true
+        losetup -d "${LOOP_DEV}" 2>/dev/null || true
+    fi
 }
 
 LOOP_DEV=""
@@ -134,7 +145,7 @@ parted -s "${WORK_IMG}" resizepart 2 -- -1s
 # Step 4: Set up loop device and partition maps
 # ---------------------------------------------------------------------------
 info "Attaching loop device..."
-LOOP_DEV=$(losetup -fP --show "${WORK_IMG}")
+LOOP_DEV=$(losetup -f --show "${WORK_IMG}")
 kpartx -av "${LOOP_DEV}"
 
 # Give udev a moment to create the device nodes
@@ -203,12 +214,18 @@ chmod +x "${MOUNT_ROOT}/opt/apple-pi-diagnostics/deploy/xinitrc"
 info "Running setup-image.sh inside chroot..."
 chroot "${MOUNT_ROOT}" /opt/apple-pi-diagnostics/deploy/setup-image.sh
 
+# Remove host QEMU binary from the target image
+rm -f "${MOUNT_ROOT}/usr/bin/qemu-aarch64-static"
+
 # ---------------------------------------------------------------------------
-# Step 9: First-boot flag — Pi OS expands filesystem on first boot; we skip that
+# Step 9: First-boot notes
 # ---------------------------------------------------------------------------
-# Remove the init_resize service so the image boots faster on first flash
-rm -f "${MOUNT_ROOT}/etc/init.d/resize2fs_once" 2>/dev/null || true
-systemctl --root="${MOUNT_ROOT}" disable resize2fs_once 2>/dev/null || true
+# Bookworm's built-in firstboot (init=/usr/lib/raspberrypi-sys-mods/firstboot
+# in /boot/firmware/cmdline.txt) cleanly expands the root partition on first
+# boot after PiShrink shrinks the image (we invoke PiShrink with -s so it
+# does not inject a conflicting /etc/rc.local resize hook).
+# userconfig.service is masked in setup-image.sh so first boot skips the
+# interactive user-creation wizard and boots straight into the GUI.
 
 # ---------------------------------------------------------------------------
 # Step 10: Unmount
@@ -245,7 +262,10 @@ chmod +x "${PISHRINK}"
 
 info "Shrinking image..."
 cp "${WORK_IMG}" "${OUT_IMG}"
-bash "${PISHRINK}" "${OUT_IMG}" || info "PiShrink encountered a non-fatal issue; continuing."
+if ! bash "${PISHRINK}" -s "${OUT_IMG}"; then
+    info "WARNING: PiShrink failed — restoring unshrunk working image."
+    cp "${WORK_IMG}" "${OUT_IMG}"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 12: Compress and checksum

@@ -4,7 +4,7 @@ set -euo pipefail
 # Wrapper to test the failsafe initramfs in QEMU
 # Usage: ./test_qemu.sh [path_to_kernel_image] [options]
 
-PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
+PROJECT_ROOT="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 INITRAMFS="$PROJECT_ROOT/build/initramfs.cpio.gz"
 KERNEL="${1:-$PROJECT_ROOT/build/kernel8.img}"
 GRAPHIC="${2:-nographic}"
@@ -13,7 +13,7 @@ if [ ! -f "$INITRAMFS" ]; then
     echo "Error: Initramfs not found. Run build_failsafe.sh first."
     echo ""
     echo "To build the initramfs, run:"
-    echo "  ./ApplePiDiagnostics/build_failsafe.sh"
+    echo "  ./build_failsafe.sh"
     exit 1
 fi
 

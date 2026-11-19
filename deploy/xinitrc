@@ -1,14 +1,29 @@
 #!/bin/sh
 # Apple Pi Diagnostics — X11 kiosk session
-# Launched by startx; runs the GUI fullscreen with no cursor or screen saver.
+# Launched by startx; runs the GUI maximized with screen blanking disabled.
 
 # Disable screen blanking and power management
-xset s off
-xset -dpms
-xset s noblank
+xset s off 2>/dev/null || true
+xset -dpms 2>/dev/null || true
+xset s noblank 2>/dev/null || true
 
-# Hide the mouse cursor when idle (requires unclutter)
-unclutter -idle 0 -root &
+# Start a lightweight window manager so dialogs, focus, and fullscreen work properly
+if command -v openbox >/dev/null 2>&1; then
+    openbox &
+fi
 
-# Launch the diagnostic GUI — exec replaces this shell so X exits when app exits
+# Hide the mouse cursor only after 5 seconds of inactivity (keeps USB mouse usable)
+if command -v unclutter >/dev/null 2>&1; then
+    unclutter -idle 5 -root &
+fi
+
+# Store reports in a writable user directory (works regardless of username)
+export APD_REPORT_DIR="${APD_REPORT_DIR:-$HOME/apd-reports}"
+mkdir -p "$APD_REPORT_DIR"
+
+# Hint to main.py to launch maximized for the kiosk display
+export APD_KIOSK=1
+
+# Launch the diagnostic GUI from the app directory
+cd /opt/apple-pi-diagnostics/full-linux-gui/app || exit 1
 exec python3 /opt/apple-pi-diagnostics/full-linux-gui/app/main.py

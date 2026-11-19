@@ -91,13 +91,23 @@ jobs:
           RAW_SIZE: ${{ steps.meta.outputs.raw_size }}
           RELEASE_DATE: ${{ steps.meta.outputs.release_date }}
         run: |
-          sed -i \
-            -e "s|RELEASE_URL_PLACEHOLDER|${RELEASE_URL}|g" \
-            -e "s|SHA256_PLACEHOLDER|${SHA256}|g" \
-            -e "s|\"extract_size\": 0|\"extract_size\": ${RAW_SIZE}|g" \
-            -e "s|\"image_download_size\": 0|\"image_download_size\": ${XZ_SIZE}|g" \
-            -e "s|RELEASE_DATE_PLACEHOLDER|${RELEASE_DATE}|g" \
-            os_list.json
+          python3 - <<'PYEOF'
+          import json, os
+
+          with open("os_list.json", "r", encoding="utf-8") as f:
+              data = json.load(f)
+
+          entry = data["os_list"][0]
+          entry["url"] = os.environ["RELEASE_URL"]
+          entry["sha256sum"] = os.environ["SHA256"]
+          entry["extract_size"] = int(os.environ["RAW_SIZE"])
+          entry["image_download_size"] = int(os.environ["XZ_SIZE"])
+          entry["release_date"] = os.environ["RELEASE_DATE"]
+
+          with open("os_list.json", "w", encoding="utf-8") as f:
+              json.dump(data, f, indent=2)
+              f.write("\n")
+          PYEOF
           echo "--- stamped os_list.json ---"
           cat os_list.json
 

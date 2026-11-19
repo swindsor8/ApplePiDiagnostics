@@ -12,15 +12,17 @@ echo "=========================================="
 echo "Building Failsafe Initramfs"
 echo "=========================================="
 echo "Project Root: $PROJECT_ROOT"
-echo "Build Dir:   $BUILD_DIR"
-echo "Output:      $OUTPUT_IMG"
+echo "Build Dir:    $BUILD_DIR"
+echo "Output:       $OUTPUT_IMG"
 echo ""
 
 # Clean previous build
+# NOTE: Do NOT create an "init" directory in $BUILD_DIR — /init must be the
+# executable init script itself. Helper init scripts live in /failsafe-init.
 echo "Cleaning previous build..."
 rm -rf "$BUILD_DIR"
 mkdir -p "$(dirname "$BUILD_DIR")"
-mkdir -p "$BUILD_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,newroot,run,diagnostics/{basic,hardware,network,storage},init,scripts}
+mkdir -p "$BUILD_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,newroot,run,diagnostics/{basic,hardware,network,storage},failsafe-init,scripts}
 
 # Install Busybox
 echo "Installing Busybox..."
@@ -45,24 +47,32 @@ else
     exit 1
 fi
 
+# Check Busybox architecture so cross-arch builds are obvious
+HOST_ARCH="$(uname -m)"
+if [ "$HOST_ARCH" != "aarch64" ] && [ "$HOST_ARCH" != "arm64" ] && [[ "$HOST_ARCH" != arm* ]]; then
+    echo "  WARNING: Building on host architecture '$HOST_ARCH'."
+    echo "  The bundled /bin/busybox is '$HOST_ARCH' and will NOT boot on a Raspberry Pi (ARM/ARM64)."
+    echo "  Run build_failsafe.sh on a Raspberry Pi, inside an ARM64 chroot (build-image.sh), or on an ARM64 runner."
+fi
+
 # Create symlinks for busybox tools
 chmod +x "$BUILD_DIR/bin/busybox"
 echo "Creating busybox symlinks..."
 pushd "$BUILD_DIR/bin" > /dev/null
 ./busybox --install -s . 2>/dev/null || {
     # Fallback: create essential symlinks manually
-    for cmd in sh mount umount mkdir rmdir ls cp mv rm cat echo sleep dd grep switch_root; do
+    for cmd in sh mount umount mkdir rmdir ls cp mv rm cat echo printf clear tee sleep dd grep sed cut tr mdev blkid findfs switch_root; do
         ln -sf busybox "$cmd" 2>/dev/null || true
     done
 }
 popd > /dev/null
 
-# Install Init Script
+# Install Init Script (must be a regular executable file at /init)
 echo "Installing init script..."
 if [ -f "$INIT_SCRIPT" ]; then
     cp "$INIT_SCRIPT" "$BUILD_DIR/init"
     chmod +x "$BUILD_DIR/init"
-    echo "  Init script installed"
+    echo "  Init script installed at /init"
 else
     echo "ERROR: Init script not found at $INIT_SCRIPT"
     exit 1
@@ -74,22 +84,21 @@ if [ -d "$FAILSAFE_DIR" ]; then
     # Copy diagnostics scripts
     if [ -d "$FAILSAFE_DIR/diagnostics" ]; then
         cp -rp "$FAILSAFE_DIR/diagnostics"/* "$BUILD_DIR/diagnostics/" 2>/dev/null || true
-        # Make all diagnostic scripts executable
         find "$BUILD_DIR/diagnostics" -type f -name "*.sh" -exec chmod +x {} \;
     fi
-    
-    # Copy init scripts
+
+    # Copy helper init scripts to /failsafe-init (never colliding with /init)
     if [ -d "$FAILSAFE_DIR/init" ]; then
-        cp -rp "$FAILSAFE_DIR/init"/* "$BUILD_DIR/init/" 2>/dev/null || true
-        find "$BUILD_DIR/init" -type f -name "*.sh" -exec chmod +x {} \;
+        cp -rp "$FAILSAFE_DIR/init"/* "$BUILD_DIR/failsafe-init/" 2>/dev/null || true
+        find "$BUILD_DIR/failsafe-init" -type f -name "*.sh" -exec chmod +x {} \;
     fi
-    
+
     # Copy other scripts
     if [ -d "$FAILSAFE_DIR/scripts" ]; then
         cp -rp "$FAILSAFE_DIR/scripts"/* "$BUILD_DIR/scripts/" 2>/dev/null || true
         find "$BUILD_DIR/scripts" -type f -name "*.sh" -exec chmod +x {} \;
     fi
-    
+
     echo "  Failsafe environment copied"
 else
     echo "  WARNING: Failsafe directory not found at $FAILSAFE_DIR"
@@ -112,6 +121,12 @@ echo "Creating device nodes..."
 _mknod "$BUILD_DIR/dev/console" c 5 1
 _mknod "$BUILD_DIR/dev/null"    c 1 3
 _mknod "$BUILD_DIR/dev/zero"    c 1 5
+
+# Sanity check: verify /init is an executable file, not a directory
+if [ ! -f "$BUILD_DIR/init" ] || [ ! -x "$BUILD_DIR/init" ]; then
+    echo "ERROR: $BUILD_DIR/init is missing or not an executable regular file!" >&2
+    exit 1
+fi
 
 # Create CPIO Archive
 echo "Creating CPIO archive..."
@@ -143,5 +158,5 @@ echo "IMPORTANT: Verify the checksum before deploying to hardware:"
 echo "  sha256sum -c ${OUTPUT_IMG}.sha256"
 echo ""
 echo "To test in QEMU, run:"
-echo "  ./ApplePiDiagnostics/test_qemu.sh <kernel_image>"
+echo "  ./test_qemu.sh <kernel_image>"
 echo ""

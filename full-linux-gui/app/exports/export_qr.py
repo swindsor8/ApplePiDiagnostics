@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
+from functools import partial
 import qrcode
 from pathlib import Path
 import socket
 import threading
 import http.server
 import socketserver
-import os
 import time
 
 from config import GATEWAY_PROBE_HOST, QR_HTTP_PORT
@@ -32,8 +32,10 @@ class _ThreadedHTTPServer(threading.Thread):
         self.httpd = None
 
     def run(self):
-        handler = http.server.SimpleHTTPRequestHandler
-        os.chdir(self.directory)
+        handler = partial(
+            http.server.SimpleHTTPRequestHandler,
+            directory=str(self.directory),
+        )
         with socketserver.TCPServer((self.bind_address, self.port), handler) as httpd:
             self.httpd = httpd
             try:

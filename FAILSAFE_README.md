@@ -27,9 +27,12 @@ The failsafe stage provides hardware diagnostics and recovery when the main Linu
 ## Building the Initramfs
 
 ```bash
-cd Apple-Pi-Diagnostics
-./ApplePiDiagnostics/build_failsafe.sh
+./build_failsafe.sh
 ```
+
+> **Architecture note:** `build_failsafe.sh` bundles the host's `busybox-static` binary.
+> To deploy to a Raspberry Pi 4/5, run it on a Raspberry Pi, inside an ARM64 chroot
+> (`build-image.sh`), or on an ARM64 Linux host.
 
 This creates `build/initramfs.cpio.gz` containing:
 - Busybox (static binary)
@@ -41,12 +44,12 @@ This creates `build/initramfs.cpio.gz` containing:
 
 ### Basic Test
 ```bash
-./ApplePiDiagnostics/test_qemu.sh <path_to_kernel8.img>
+./test_qemu.sh <path_to_kernel8.img>
 ```
 
 ### Test Different Failure Modes
 ```bash
-./ApplePiDiagnostics/test_failure_modes.sh <path_to_kernel8.img>
+./test_failure_modes.sh <path_to_kernel8.img>
 ```
 
 Options:
@@ -56,28 +59,31 @@ Options:
 
 ### Graphical Mode
 ```bash
-./ApplePiDiagnostics/test_qemu.sh <kernel> graphic
+./test_qemu.sh <kernel> graphic
 ```
 
 ## Testing on Real Raspberry Pi
 
-1. **Build the initramfs** (on your development machine):
+> **Note:** Raspberry Pi OS Bookworm mounts the boot partition at `/boot/firmware/`.
+> Older Bullseye/Buster releases use `/boot/`.
+
+1. **Build the initramfs** (on a Raspberry Pi / ARM64 host):
    ```bash
-   ./ApplePiDiagnostics/build_failsafe.sh
+   sudo ./build_failsafe.sh
    ```
 
 2. **Copy to Pi's boot partition**:
    ```bash
-   scp build/initramfs.cpio.gz pi@<pi-ip>:/boot/
+   sudo cp build/initramfs.cpio.gz /boot/firmware/initramfs.cpio.gz
    ```
 
 3. **Configure boot** (on the Pi):
-   Edit `/boot/config.txt` and add:
+   Edit `/boot/firmware/config.txt` and add:
    ```
    initramfs initramfs.cpio.gz followkernel
    ```
 
-   Edit `/boot/cmdline.txt` and ensure it includes:
+   Edit `/boot/firmware/cmdline.txt` and ensure it includes:
    ```
    rdinit=/init
    ```

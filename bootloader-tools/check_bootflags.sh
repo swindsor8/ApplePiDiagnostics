@@ -17,17 +17,21 @@ if [[ -n "$DEVICE" ]]; then
   echo "Block devices (lsblk):"
   lsblk "$DEVICE" || true
 else
-  echo "No device specified. Inspecting local /boot and root filesystem."
+  BOOT_DIR="/boot"
+  if [[ -d /boot/firmware ]]; then
+    BOOT_DIR="/boot/firmware"
+  fi
+  echo "No device specified. Inspecting local ${BOOT_DIR} and root filesystem."
   echo
-  echo "Listing /boot contents:"
-  ls -la /boot || echo "/boot not mounted or not present."
+  echo "Listing ${BOOT_DIR} contents:"
+  ls -la "$BOOT_DIR" || echo "${BOOT_DIR} not mounted or not present."
   echo
   echo "Looking for common boot files:"
-  for f in kernel.img vmlinuz bcm2711-rpi-4-b.dtb start4.elf pieeprom.bin recovery.bin; do
-    if [[ -e /boot/$f ]]; then
-      echo "  OK: /boot/$f"
+  for f in kernel8.img kernel.img vmlinuz bcm2711-rpi-4-b.dtb start4.elf config.txt cmdline.txt pieeprom.bin recovery.bin; do
+    if [[ -e "${BOOT_DIR}/$f" ]]; then
+      echo "  OK: ${BOOT_DIR}/$f"
     else
-      echo "  MISSING: /boot/$f"
+      echo "  MISSING: ${BOOT_DIR}/$f"
     fi
   done
 fi

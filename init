@@ -3,6 +3,8 @@
 # Apple Pi Diagnostics - Failsafe Init
 # Handles basic hardware verification, LED status, framebuffer display, and handover to Linux.
 
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
 # 1. Mount essential filesystems
 /bin/busybox mkdir -p /proc /sys /dev /tmp /newroot /run
 /bin/busybox mount -t proc proc /proc
@@ -34,7 +36,7 @@ set_led_trigger() {
 }
 
 blink_fail() {
-    echo "CRITICAL FAILURE. Entering LED loop."
+    echo "CRITICAL FAILURE. Starting LED failure indicator."
     set_led_trigger "none"  # Disable automatic triggers
     while true; do
         set_led 255; /bin/busybox sleep 0.2
@@ -73,17 +75,16 @@ init_framebuffer() {
 
 display_text() {
     if [ "$FB_AVAILABLE" -eq 1 ]; then
-        # Write to console which may be displayed on framebuffer
-        echo "$1" > /dev/tty0 2>/dev/null || true
+        /bin/busybox printf '%b\n' "$1" > /dev/tty0 2>/dev/null || true
     fi
-    echo "[APD-FAILSAFE] $1"
+    /bin/busybox printf '[APD-FAILSAFE] %b\n' "$1"
 }
 
 display_status() {
-    local status="$1"
-    local message="$2"
-    local color_code=""
-    
+    status="$1"
+    message="$2"
+    color_code=""
+
     case "$status" in
         "OK"|"SUCCESS")
             color_code="\033[32m"  # Green
@@ -98,17 +99,65 @@ display_status() {
             color_code="\033[37m"  # White
             ;;
     esac
-    
-    display_text "${color_code}[$status] ${message}\033[0m"
+
+    display_text "${color_code}[${status}] ${message}\033[0m"
 }
 
-# 4. Logging
+# 4. Logging & Device Discovery Helpers
 log_msg() {
     echo "[APD-FAILSAFE] $1" | /bin/busybox tee -a /tmp/failsafe.log
 }
 
+resolve_root_device() {
+    root_param=""
+    if [ -f "/proc/cmdline" ]; then
+        for arg in $(/bin/busybox cat /proc/cmdline); do
+            case "$arg" in
+                root=*)
+                    root_param="${arg#root=}"
+                    ;;
+            esac
+        done
+    fi
+
+    case "$root_param" in
+        PARTUUID=*|UUID=*|LABEL=*)
+            resolved=$(/bin/busybox findfs "$root_param" 2>/dev/null || true)
+            if [ -n "$resolved" ] && [ -b "$resolved" ]; then
+                echo "$resolved"
+                return 0
+            fi
+            ;;
+        /dev/*)
+            if [ -b "$root_param" ]; then
+                echo "$root_param"
+                return 0
+            fi
+            ;;
+    esac
+
+    if [ -b "/dev/mmcblk0p2" ]; then
+        echo "/dev/mmcblk0p2"
+        return 0
+    fi
+    return 1
+}
+
+wait_for_storage() {
+    # Give SD/MMC/USB drivers up to 5 seconds to finish probing on Pi 4/5
+    waited=0
+    while [ "$waited" -lt 10 ]; do
+        if [ -b "/dev/mmcblk0" ] || [ -b "/dev/sda" ] || [ -b "/dev/nvme0n1" ]; then
+            return 0
+        fi
+        /bin/busybox sleep 0.5
+        waited=$((waited + 1))
+    done
+    return 1
+}
+
 # Initialize
-clear
+/bin/busybox clear 2>/dev/null || true
 init_framebuffer
 display_text ""
 display_text "========================================"
@@ -125,19 +174,29 @@ CHECKS_WARNING=0
 
 check_storage() {
     display_text "Checking Storage..."
-    if [ ! -b "/dev/mmcblk0" ]; then
-        display_status "FAIL" "SD Card not detected (/dev/mmcblk0 missing)"
+    wait_for_storage || true
+
+    STORAGE_DEV=""
+    for candidate in /dev/mmcblk0 /dev/nvme0n1 /dev/sda; do
+        if [ -b "$candidate" ]; then
+            STORAGE_DEV="$candidate"
+            break
+        fi
+    done
+
+    if [ -z "$STORAGE_DEV" ]; then
+        display_status "FAIL" "Storage device not detected (/dev/mmcblk0 missing)"
         CHECKS_FAILED=$((CHECKS_FAILED + 1))
         return 1
     fi
-    
+
     # Try to read first sector
-    if /bin/busybox dd if=/dev/mmcblk0 of=/dev/null bs=512 count=1 2>/dev/null; then
-        display_status "OK" "Storage device accessible"
+    if /bin/busybox dd if="$STORAGE_DEV" of=/dev/null bs=512 count=1 2>/dev/null; then
+        display_status "OK" "Storage device accessible ($STORAGE_DEV)"
         CHECKS_PASSED=$((CHECKS_PASSED + 1))
         return 0
     else
-        display_status "FAIL" "Storage device not readable"
+        display_status "FAIL" "Storage device not readable ($STORAGE_DEV)"
         CHECKS_FAILED=$((CHECKS_FAILED + 1))
         return 1
     fi
@@ -146,8 +205,8 @@ check_storage() {
 check_power() {
     display_text "Checking Power..."
     if [ -f "/sys/devices/platform/soc/soc:firmware/get_throttled" ]; then
-        THROTTLED=$(cat /sys/devices/platform/soc/soc:firmware/get_throttled 2>/dev/null || echo "0")
-        if [ "$THROTTLED" != "0" ]; then
+        THROTTLED=$(/bin/busybox cat /sys/devices/platform/soc/soc:firmware/get_throttled 2>/dev/null || echo "0")
+        if [ "$THROTTLED" != "0" ] && [ "$THROTTLED" != "0x0" ]; then
             display_status "WARNING" "Under-voltage detected! (Code: $THROTTLED)"
             CHECKS_WARNING=$((CHECKS_WARNING + 1))
             blink_warning
@@ -189,18 +248,16 @@ check_storage
 STORAGE_OK=$?
 
 check_power
-POWER_OK=$?
 
 check_cpu
-CPU_OK=$?
 
 # Summary
 display_text ""
 display_text "========================================"
 display_text "Diagnostics Summary:"
-display_text "  Passed:  $CHECKS_PASSED"
+display_text "  Passed:   $CHECKS_PASSED"
 display_text "  Warnings: $CHECKS_WARNING"
-display_text "  Failed:  $CHECKS_FAILED"
+display_text "  Failed:   $CHECKS_FAILED"
 display_text "========================================"
 display_text ""
 
@@ -208,40 +265,59 @@ display_text ""
 if [ "$CHECKS_FAILED" -gt 0 ]; then
     display_status "FAIL" "Critical hardware failure detected!"
     display_text "System cannot boot. Entering failsafe console."
-    blink_fail
-    exec /bin/sh
+    blink_fail &
+    exec /bin/busybox sh
 elif [ "$STORAGE_OK" -eq 0 ]; then
     # Try to boot main system
     display_text "Attempting to mount root filesystem..."
-    
-    # Try mounting partition 2 (standard root)
-    if /bin/busybox mount -o ro /dev/mmcblk0p2 /newroot 2>/dev/null; then
-        if [ -x "/newroot/sbin/init" ] || [ -x "/newroot/usr/lib/systemd/systemd" ]; then
-            display_status "SUCCESS" "Root filesystem valid. Switching to full system..."
+
+    # Wait briefly for root partition node to settle
+    ROOT_DEV=""
+    waited=0
+    while [ "$waited" -lt 10 ]; do
+        ROOT_DEV=$(resolve_root_device || true)
+        if [ -n "$ROOT_DEV" ]; then
+            break
+        fi
+        /bin/busybox sleep 0.5
+        waited=$((waited + 1))
+    done
+
+    if [ -n "$ROOT_DEV" ] && /bin/busybox mount -o ro "$ROOT_DEV" /newroot 2>/dev/null; then
+        # NOTE: On Bookworm (usrmerge), /newroot/sbin/init is an absolute
+        # symlink -> /lib/systemd/systemd, which resolves against the initramfs
+        # root when tested with [ -x ]. Check -L as well as systemd paths.
+        INIT_TARGET=""
+        if [ -L "/newroot/sbin/init" ] || [ -x "/newroot/sbin/init" ]; then
+            INIT_TARGET="/sbin/init"
+        elif [ -x "/newroot/usr/lib/systemd/systemd" ]; then
+            INIT_TARGET="/usr/lib/systemd/systemd"
+        elif [ -x "/newroot/lib/systemd/systemd" ]; then
+            INIT_TARGET="/lib/systemd/systemd"
+        fi
+
+        if [ -n "$INIT_TARGET" ]; then
+            display_status "SUCCESS" "Root filesystem valid ($ROOT_DEV). Switching to full system..."
             blink_success
             /bin/busybox sleep 1
-            
+
             # Cleanup and Switch
             /bin/busybox umount /proc /sys /dev 2>/dev/null || true
-            if [ -x "/newroot/sbin/init" ]; then
-                exec /bin/busybox switch_root /newroot /sbin/init
-            else
-                exec /bin/busybox switch_root /newroot /usr/lib/systemd/systemd
-            fi
+            exec /bin/busybox switch_root /newroot "$INIT_TARGET"
         else
-            display_status "WARNING" "Root filesystem mounted but init not found"
+            display_status "WARNING" "Root filesystem mounted ($ROOT_DEV) but init not found"
             display_text "Staying in failsafe mode."
             blink_warning
-            exec /bin/sh
+            exec /bin/busybox sh
         fi
     else
-        display_status "WARNING" "Cannot mount root filesystem"
+        display_status "WARNING" "Cannot mount root filesystem (${ROOT_DEV:-not found})"
         display_text "Staying in failsafe mode."
         blink_warning
-        exec /bin/sh
+        exec /bin/busybox sh
     fi
 else
     display_status "FAIL" "Storage check failed. Cannot proceed."
-    blink_fail
-    exec /bin/sh
+    blink_fail &
+    exec /bin/busybox sh
 fi

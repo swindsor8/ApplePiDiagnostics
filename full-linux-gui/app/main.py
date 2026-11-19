@@ -3,9 +3,10 @@
 Apple Pi Diagnostics - Full Linux GUI (ASUS MyASus-style Dashboard)
 Run: source ../venv/bin/activate && python3 main.py
 """
-import sys
+import os
 import platform
 import socket
+import sys
 import threading
 from pathlib import Path
 from datetime import datetime
@@ -31,8 +32,17 @@ except Exception:
     LOGO_PATH = None
 
 APP_DIR = Path(__file__).resolve().parents[1]
-REPORT_DIR = APP_DIR / "reports"
-REPORT_DIR.mkdir(exist_ok=True)
+
+
+def _get_report_dir():
+    report_dir = Path(
+        os.environ.get("APD_REPORT_DIR") or APP_DIR / "reports"
+    ).expanduser()
+    report_dir.mkdir(parents=True, exist_ok=True)
+    return report_dir
+
+
+REPORT_DIR = _get_report_dir()
 
 # ---------------------------------------------------------------------------
 # SVG icon helpers
@@ -1835,7 +1845,10 @@ def main():
         pass
 
     window = MainWindow()
-    window.show()
+    if os.environ.get("APD_KIOSK") == "1":
+        window.showMaximized()
+    else:
+        window.show()
     if startup_check_results:
         window.show_startup_banner(startup_check_results)
     sys.exit(app.exec())

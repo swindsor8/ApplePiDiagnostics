@@ -7,8 +7,8 @@ After=multi-user.target
 User=pi
 WorkingDirectory=/opt/apple-pi-diagnostics/full-linux-gui
 Environment=HOME=/home/pi
-# startx manages the X server; -nocursor suppresses the default X cursor
-ExecStart=/usr/bin/startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 -nocursor
+# startx manages the X server
+ExecStart=/usr/bin/startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0
 Restart=on-failure
 RestartSec=5
 

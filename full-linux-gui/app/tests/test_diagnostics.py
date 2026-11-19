@@ -124,6 +124,14 @@ class TestStorage:
         assert "devices" in result, f"Storage result missing 'devices': {result}"
         assert isinstance(result["devices"], list)
 
+    def test_base_block_device_parsing(self):
+        from diagnostics.storage.storage_test import _base_block_device
+        assert _base_block_device("/dev/mmcblk0p2") == "/dev/mmcblk0"
+        assert _base_block_device("/dev/mmcblk0") == "/dev/mmcblk0"
+        assert _base_block_device("/dev/nvme0n1p1") == "/dev/nvme0n1"
+        assert _base_block_device("/dev/sda1") == "/dev/sda"
+        assert _base_block_device("/dev/sdb") == "/dev/sdb"
+
 
 # ---------------------------------------------------------------------------
 # USB
@@ -158,6 +166,27 @@ class TestHDMI:
         result = run_hdmi_quick_test()
         _assert_valid_result(result, "hdmi")
 
+    def test_vcgencmd_fallback_never_powers_off_display(self, monkeypatch):
+        import subprocess
+        from diagnostics.hdmi import hdmi_test
+
+        called = []
+
+        def fake_which(cmd):
+            return "/usr/bin/vcgencmd" if cmd == "vcgencmd" else None
+
+        def fake_check_output(cmd, **kwargs):
+            called.append(cmd)
+            return "display_power=1\n"
+
+        monkeypatch.setattr(hdmi_test.shutil, "which", fake_which)
+        monkeypatch.setattr(hdmi_test, "_detect_via_drm_sysfs", lambda: [])
+        monkeypatch.setattr(subprocess, "check_output", fake_check_output)
+
+        result = hdmi_test.run_hdmi_detect()
+        assert result["status"] == "OK"
+        assert called == [["vcgencmd", "display_power", "-1"]]
+
 
 # ---------------------------------------------------------------------------
 # GPIO
@@ -186,6 +215,15 @@ class TestConfig:
         assert isinstance(NETWORK_PING_TARGETS, list) and len(NETWORK_PING_TARGETS) > 0
         assert isinstance(NETWORK_DNS_CHECK_HOST, str) and NETWORK_DNS_CHECK_HOST
         assert isinstance(QR_HTTP_PORT, int) and 1024 <= QR_HTTP_PORT <= 65535
+
+    def test_report_dir_uses_configured_writable_path(self, tmp_path, monkeypatch):
+        from main import _get_report_dir
+
+        report_dir = tmp_path / "nested" / "reports"
+        monkeypatch.setenv("APD_REPORT_DIR", str(report_dir))
+
+        assert _get_report_dir() == report_dir
+        assert report_dir.is_dir()
 
 
 # ---------------------------------------------------------------------------

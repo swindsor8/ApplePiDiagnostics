@@ -3,7 +3,7 @@
 # Test script for running failsafe diagnostics on actual Raspberry Pi
 # This script helps test the initramfs on real hardware
 
-PROJECT_ROOT="$(dirname "$(dirname "$(realpath "$0")")")"
+PROJECT_ROOT="$(cd "$(dirname "$(realpath "$0")")" && pwd)"
 INITRAMFS="$PROJECT_ROOT/build/initramfs.cpio.gz"
 
 if [ ! -f "$INITRAMFS" ]; then
@@ -15,15 +15,19 @@ echo "=========================================="
 echo "Raspberry Pi Failsafe Test Instructions"
 echo "=========================================="
 echo ""
-echo "To test the failsafe initramfs on a Raspberry Pi:"
+echo "Note: Raspberry Pi OS Bookworm mounts the boot partition at /boot/firmware"
+echo "      (older Bullseye/Buster releases use /boot)."
+echo ""
+echo "To test the failsafe initramfs on a Raspberry Pi (build it on ARM64 / Pi):"
 echo ""
 echo "1. Copy the initramfs to your Pi's boot partition:"
-echo "   scp $INITRAMFS pi@<pi-ip>:/boot/initramfs.cpio.gz"
+echo "   scp $INITRAMFS pi@<pi-ip>:/tmp/initramfs.cpio.gz"
+echo "   ssh pi@<pi-ip> 'sudo mv /tmp/initramfs.cpio.gz /boot/firmware/initramfs.cpio.gz'"
 echo ""
-echo "2. On the Pi, edit /boot/config.txt and add:"
+echo "2. On the Pi, edit /boot/firmware/config.txt and add:"
 echo "   initramfs initramfs.cpio.gz followkernel"
 echo ""
-echo "3. Edit /boot/cmdline.txt and ensure it includes:"
+echo "3. Edit /boot/firmware/cmdline.txt and ensure it includes:"
 echo "   rdinit=/init"
 echo ""
 echo "4. Reboot the Pi:"

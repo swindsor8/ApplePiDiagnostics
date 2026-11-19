@@ -20,6 +20,38 @@ def _safe_err(e: Exception) -> str:
     return re.sub(r'/\S+', '[path]', str(e))
 
 
+def _base_block_device(device: str) -> str:
+    """Return the whole-disk device path for a partition or disk path.
+
+    Handles both mmcblk/nvme naming (/dev/mmcblk0p2 -> /dev/mmcblk0,
+    /dev/nvme0n1p1 -> /dev/nvme0n1) and SCSI/SATA/USB naming (/dev/sda1 -> /dev/sda).
+    """
+    if re.search(r'(mmcblk\d+|nvme\d+n\d+)p\d+$', device):
+        return re.sub(r'p\d+$', '', device)
+    if re.search(r'/sd[a-z]+\d+$', device) or re.match(r'^sd[a-z]+\d+$', device):
+        return re.sub(r'\d+$', '', device)
+    return device
+
+
+def _get_block_device_size(device_path: str) -> int:
+    """Return block device size in bytes using /sys/block/<name>/size."""
+    dev_name = os.path.basename(device_path)
+    sysfs_size = f"/sys/block/{dev_name}/size"
+    try:
+        if os.path.exists(sysfs_size):
+            with open(sysfs_size, "r", encoding="utf-8") as f:
+                sectors = int(f.read().strip())
+            return sectors * 512
+    except Exception:
+        pass
+    try:
+        if os.path.exists(device_path):
+            return os.path.getsize(device_path)
+    except Exception:
+        pass
+    return 0
+
+
 def _detect_storage_devices() -> List[Dict[str, Any]]:
     """Detect all storage devices (SD card, USB, hard drives).
     
@@ -28,19 +60,25 @@ def _detect_storage_devices() -> List[Dict[str, Any]]:
     devices = []
     
     try:
-        # Get disk partitions
-        partitions = psutil.disk_partitions(all=True)
+        # Get physical disk partitions (exclude virtual/pseudo filesystems)
+        partitions = psutil.disk_partitions(all=False)
         
         # Track which devices we've seen
         seen_devices = set()
         
         for partition in partitions:
             device = partition.device
-            if not device or device.startswith('/dev/loop') or device.startswith('/dev/sr'):
+            if (
+                not device
+                or not device.startswith('/dev/')
+                or device.startswith('/dev/loop')
+                or device.startswith('/dev/sr')
+                or device.startswith('/dev/zram')
+            ):
                 continue
             
-            # Get the base device (without partition number)
-            base_device = device.rstrip('0123456789')
+            # Get the base device (without partition suffix)
+            base_device = _base_block_device(device)
             if base_device in seen_devices:
                 continue
             
@@ -67,12 +105,7 @@ def _detect_storage_devices() -> List[Dict[str, Any]]:
                 device_type = "NVMe SSD"
             
             # Get device size
-            size = 0
-            try:
-                if os.path.exists(base_device):
-                    size = os.path.getsize(base_device)
-            except Exception:
-                pass
+            size = _get_block_device_size(base_device)
             
             # Get mountpoint
             mountpoint = partition.mountpoint if partition.mountpoint else None
@@ -90,13 +123,11 @@ def _detect_storage_devices() -> List[Dict[str, Any]]:
         try:
             for dev_file in Path("/dev").iterdir():
                 dev_name = dev_file.name
-                if dev_name.startswith(('mmcblk', 'sd', 'nvme')) and dev_name not in seen_devices:
-                    # Check if it's a block device
+                if dev_name.startswith(('mmcblk', 'sd', 'nvme')):
                     if dev_file.is_block_device():
-                        base_name = dev_name.rstrip('0123456789p')
-                        if base_name not in seen_devices:
-                            seen_devices.add(base_name)
-                            device_path = f"/dev/{base_name}"
+                        device_path = _base_block_device(f"/dev/{dev_name}")
+                        if device_path not in seen_devices:
+                            seen_devices.add(device_path)
                             
                             # Determine type
                             device_type = "Unknown"
@@ -107,12 +138,7 @@ def _detect_storage_devices() -> List[Dict[str, Any]]:
                             elif dev_name.startswith('nvme'):
                                 device_type = "NVMe SSD"
                             
-                            # Get size
-                            size = 0
-                            try:
-                                size = os.path.getsize(device_path)
-                            except Exception:
-                                pass
+                            size = _get_block_device_size(device_path)
                             
                             devices.append({
                                 "device": device_path,
@@ -153,7 +179,8 @@ def _test_device_speed(device_path: str, mountpoint: Optional[str] = None,
     
     try:
         # Determine test location
-        if mountpoint and os.path.isdir(mountpoint) and os.access(mountpoint, os.W_OK):
+        used_mounted = bool(mountpoint and os.path.isdir(mountpoint) and os.access(mountpoint, os.W_OK))
+        if used_mounted:
             # Test on mounted filesystem
             test_dir = mountpoint
         else:
@@ -204,7 +231,7 @@ def _test_device_speed(device_path: str, mountpoint: Optional[str] = None,
             "tested_mb": tested_mb,
             "write_mb_s": write_mb_s,
             "read_mb_s": read_mb_s,
-            "test_location": "mounted" if mountpoint else "fallback",
+            "test_location": "mounted" if used_mounted else "fallback",
         }
     except Exception as e:
         return {

@@ -18,7 +18,11 @@ if [[ ! "$DEV" =~ ^/dev/[a-zA-Z0-9]+$ ]]; then
   exit 2
 fi
 
-BOOTPART="${DEV}1"
+if [[ "$DEV" =~ (mmcblk|nvme|loop)[0-9]+$ ]]; then
+  BOOTPART="${DEV}p1"
+else
+  BOOTPART="${DEV}1"
+fi
 
 echo "Validating SD device: $DEV"
 echo "Checking if device exists..."

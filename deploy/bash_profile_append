@@ -1,6 +1,13 @@
 # Apple Pi Diagnostics — auto-start GUI on tty1
 # Appended to /home/pi/.bash_profile by setup-image.sh.
 # Only triggers on the physical console (not SSH), and only if X is not already running.
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-    exec startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 -nocursor 2>/tmp/apd-x11.log
+if [ -z "$DISPLAY" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
+    startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 2>/tmp/apd-x11.log
+    EXIT_CODE=$?
+    if [ "$EXIT_CODE" -ne 0 ]; then
+        echo ""
+        echo "[Apple Pi Diagnostics] GUI exited with code $EXIT_CODE."
+        echo "Inspect /tmp/apd-x11.log for details, or run:"
+        echo "  startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0"
+    fi
 fi
