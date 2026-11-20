@@ -2,14 +2,17 @@
   "os_list": [
     {
       "name": "Apple Pi Diagnostics",
-      "description": "3-stage hardware diagnostic & recovery suite for Raspberry Pi. Boots straight into a full diagnostic GUI — no setup required. Tests CPU, RAM, storage, network, USB, HDMI, and GPIO. Generates PDF reports.",
-      "url": "https://github.com/swindsor8/ApplePiDiagnostics/releases/download/v1.0.0/apple-pi-diagnostics.img.xz",
+      "description": "3-stage hardware diagnostic & recovery suite for Raspberry Pi. Boots straight into a full diagnostic GUI \u2014 no setup required. Tests CPU, RAM, storage, network, USB, HDMI, and GPIO. Generates PDF reports.",
+      "url": "https://github.com/swindsor8/ApplePiDiagnostics/releases/download/v1.1.4/apple-pi-diagnostics.img.xz",
       "icon": "https://raw.githubusercontent.com/swindsor8/ApplePiDiagnostics/main/full-linux-gui/app/assets/apple_pi_logo.png",
-      "sha256sum": "2412bcfeee1c8d6bd6b47e6862e2072f346afad78bf0c4c3347a21803f275a2d",
-      "extract_size": 3173536256,
-      "image_download_size": 518351288,
-      "release_date": "2026-04-05",
-      "devices": ["pi4-64bit", "pi5"]
+      "sha256sum": "fb5dc1345c147c45b251603218018bf2e4194753e3bed457c86c3f81c6a6efc1",
+      "extract_size": 3411395072,
+      "image_download_size": 531670376,
+      "release_date": "2026-11-20",
+      "devices": [
+        "pi4-64bit",
+        "pi5"
+      ]
     }
   ]
 }
