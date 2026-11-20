@@ -26,4 +26,4 @@ export APD_KIOSK=1
 
 # Launch the diagnostic GUI from the app directory
 cd /opt/apple-pi-diagnostics/full-linux-gui/app || exit 1
-exec python3 /opt/apple-pi-diagnostics/full-linux-gui/app/main.py
+exec python3 /opt/apple-pi-diagnostics/full-linux-gui/app/main.py >/tmp/apd-gui.log 2>&1

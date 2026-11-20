@@ -2,12 +2,20 @@
 # Appended to /home/pi/.bash_profile by setup-image.sh.
 # Only triggers on the physical console (not SSH), and only if X is not already running.
 if [ -z "$DISPLAY" ] && [ "$(tty 2>/dev/null)" = "/dev/tty1" ]; then
-    startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 2>/tmp/apd-x11.log
+    echo ""
+    echo "[Apple Pi Diagnostics] Starting graphical interface..."
+    startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 vt1 2>/tmp/apd-x11.log
     EXIT_CODE=$?
     if [ "$EXIT_CODE" -ne 0 ]; then
         echo ""
         echo "[Apple Pi Diagnostics] GUI exited with code $EXIT_CODE."
-        echo "Inspect /tmp/apd-x11.log for details, or run:"
-        echo "  startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0"
+        echo "--- Last 20 lines of /tmp/apd-x11.log ---"
+        tail -n 20 /tmp/apd-x11.log 2>/dev/null || true
+        if [ -s /tmp/apd-gui.log ]; then
+            echo "--- Last 20 lines of /tmp/apd-gui.log ---"
+            tail -n 20 /tmp/apd-gui.log 2>/dev/null || true
+        fi
+        echo "To retry manually, run:"
+        echo "  startx /opt/apple-pi-diagnostics/deploy/xinitrc -- :0 vt1"
     fi
 fi

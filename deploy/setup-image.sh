@@ -19,6 +19,8 @@ apt-get install -y --no-install-recommends \
     xserver-xorg-input-libinput \
     xserver-xorg-video-fbdev \
     libgl1-mesa-dri \
+    libegl1 \
+    libgles2 \
     xinit \
     xauth \
     x11-xserver-utils \
@@ -46,10 +48,20 @@ apt-get install -y --no-install-recommends python3-gpiozero python3-rpi-lgpio \
     || true
 
 # Allow non-root startx on tty1 to open the console/DRM cleanly
-mkdir -p /etc/X11
+mkdir -p /etc/X11 /etc/X11/xorg.conf.d
 cat > /etc/X11/Xwrapper.config <<'EOF'
 allowed_users=anybody
 needs_root_rights=auto
+EOF
+
+# Ensure Xorg binds to the Pi 4/5 VC4 KMS display controller (not render-only v3d)
+cat > /etc/X11/xorg.conf.d/99-vc4.conf <<'EOF'
+Section "OutputClass"
+    Identifier "vc4"
+    MatchDriver "vc4"
+    Driver "modesetting"
+    Option "PrimaryGPU" "true"
+EndSection
 EOF
 
 echo "==> [setup-image] Installing Python packages..."
@@ -73,6 +85,8 @@ echo "==> [setup-image] Ensuring pi user exists and disabling first-boot wizard.
 if ! id -u pi >/dev/null 2>&1; then
     useradd -m -s /bin/bash pi
 fi
+# Ensure the pi account is not expired so agetty --autologin pi always succeeds
+chage -d 19000 -E -1 pi 2>/dev/null || true
 # Add pi to hardware/display/input groups if they exist on the image
 for grp in video render input tty audio plugdev netdev dialout gpio i2c spi sudo; do
     if getent group "$grp" >/dev/null 2>&1; then
@@ -82,17 +96,29 @@ done
 
 # Disable Raspberry Pi OS Bookworm's interactive user-creation wizard so it
 # never hijacks tty1 or renames the pi user out from under autologin.
+# Note: userconf-pi ships with getty@tty1.service DISABLED until userconfig
+# finishes, so we MUST explicitly unmask and enable getty@tty1.service below.
+systemctl disable userconfig.service 2>/dev/null || true
 systemctl mask userconfig.service 2>/dev/null || true
 rm -f /etc/systemd/system/multi-user.target.wants/userconfig.service 2>/dev/null || true
 systemctl disable piwiz.service 2>/dev/null || true
 
-echo "==> [setup-image] Configuring auto-login on tty1..."
+echo "==> [setup-image] Configuring and enabling auto-login on tty1..."
+rm -f /etc/systemd/system/getty@tty1.service.d/*userconf* 2>/dev/null || true
 mkdir -p /etc/systemd/system/getty@tty1.service.d
 cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<'EOF'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin pi --noclear %I $TERM
 EOF
+
+# Re-enable getty@tty1.service (disabled by default in Bookworm Lite by userconf-pi)
+systemctl unmask getty@tty1.service 2>/dev/null || true
+systemctl enable getty@tty1.service
+if [ ! -L /etc/systemd/system/getty.target.wants/getty@tty1.service ]; then
+    echo "ERROR: getty@tty1.service is not enabled in getty.target.wants!" >&2
+    exit 1
+fi
 
 echo "==> [setup-image] Configuring auto-startx for pi user..."
 mkdir -p /home/pi
