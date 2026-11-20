@@ -237,27 +237,27 @@ class GpioPinoutDialog(QtWidgets.QDialog):
         layout.setSpacing(10)
 
         self._status_lbl = QtWidgets.QLabel("Reading GPIO header state (read-only — no pins toggled)…")
-        self._status_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #1a1a1a;")
+        self._status_lbl.setObjectName("SectionHeading")
         layout.addWidget(self._status_lbl)
 
         legend = QtWidgets.QLabel(
-            "Legend:  [5V = Red]  [3.3V = Amber]  [GND = Gray]  [GPIO HIGH = Green]  [GPIO LOW = Blue]"
+            "Legend:  5V (Red)  ·  3.3V (Amber)  ·  GND (Gray)  ·  GPIO HIGH (Green)  ·  GPIO LOW (Blue)"
         )
-        legend.setStyleSheet("font-size: 11px; color: #555555;")
+        legend.setObjectName("MutedLabel")
         layout.addWidget(legend)
 
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         grid_widget = QtWidgets.QWidget()
         grid = QtWidgets.QGridLayout(grid_widget)
-        grid.setSpacing(4)
+        grid.setSpacing(6)
 
         kind_colors = {
             "5v": ("#ef4444", "#ffffff"),
             "3v3": ("#f59e0b", "#111111"),
-            "gnd": ("#374151", "#ffffff"),
+            "gnd": ("#4b5563", "#ffffff"),
             "id": ("#6b7280", "#ffffff"),
-            "gpio": ("#2563eb", "#ffffff"),
+            "gpio": ("#0a84ff", "#ffffff"),
         }
 
         for row_idx in range(20):
@@ -276,12 +276,13 @@ class GpioPinoutDialog(QtWidgets.QDialog):
                 )
 
                 name_lbl = QtWidgets.QLabel(plabel)
-                name_lbl.setStyleSheet("font-size: 12px; color: #1a1a1a; padding: 0 6px;")
+                name_lbl.setObjectName("ValueLabel")
+                name_lbl.setStyleSheet("font-size: 12px; padding: 0 6px;")
 
                 state_lbl = QtWidgets.QLabel("—" if bcm is not None else "")
-                state_lbl.setFixedWidth(48)
+                state_lbl.setFixedWidth(50)
                 state_lbl.setAlignment(QtCore.Qt.AlignCenter)
-                state_lbl.setStyleSheet("font-size: 11px; color: #666666; font-weight: 600;")
+                state_lbl.setObjectName("MutedLabel")
                 if bcm is not None:
                     self._state_labels[bcm] = state_lbl
 
@@ -361,10 +362,11 @@ class WifiConnectDialog(QtWidgets.QDialog):
 
         top = QtWidgets.QHBoxLayout()
         self._status = QtWidgets.QLabel("Scanning for Wi-Fi networks…")
-        self._status.setStyleSheet("font-size: 13px; color: #333333;")
+        self._status.setObjectName("MutedLabel")
         top.addWidget(self._status)
         top.addStretch()
         self._scan_btn = QtWidgets.QPushButton("Rescan")
+        self._scan_btn.setObjectName("SecondaryButton")
         self._scan_btn.clicked.connect(self._scan_networks)
         top.addWidget(self._scan_btn)
         layout.addLayout(top)
@@ -386,13 +388,12 @@ class WifiConnectDialog(QtWidgets.QDialog):
         btns = QtWidgets.QHBoxLayout()
         btns.addStretch()
         self._connect_btn = QtWidgets.QPushButton("Connect")
-        self._connect_btn.setStyleSheet(
-            "background-color: #0078d4; color: white; border: none; border-radius: 6px; padding: 8px 20px; font-weight: 600;"
-        )
+        self._connect_btn.setObjectName("PrimaryButton")
         self._connect_btn.clicked.connect(self._connect)
         btns.addWidget(self._connect_btn)
 
         close_btn = QtWidgets.QPushButton("Close")
+        close_btn.setObjectName("SecondaryButton")
         close_btn.clicked.connect(self.accept)
         btns.addWidget(close_btn)
         layout.addLayout(btns)
@@ -506,25 +507,30 @@ class QrPreviewDialog(QtWidgets.QDialog):
 
         heading = QtWidgets.QLabel("Scan with your phone on the same Wi-Fi / LAN")
         heading.setAlignment(QtCore.Qt.AlignCenter)
-        heading.setStyleSheet("font-size: 14px; font-weight: 600; color: #1a1a1a;")
+        heading.setObjectName("SectionHeading")
         layout.addWidget(heading)
 
+        qr_frame = QtWidgets.QFrame()
+        qr_frame.setStyleSheet("background-color: #ffffff; border-radius: 12px; padding: 12px;")
+        qr_lay = QtWidgets.QVBoxLayout(qr_frame)
         img_lbl = QtWidgets.QLabel()
         img_lbl.setAlignment(QtCore.Qt.AlignCenter)
         if qr_path and Path(qr_path).is_file():
             pix = QtGui.QPixmap(str(qr_path)).scaled(
-                280, 280, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+                260, 260, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
             )
             img_lbl.setPixmap(pix)
         else:
             img_lbl.setText("QR image unavailable")
-        layout.addWidget(img_lbl)
+            img_lbl.setStyleSheet("color: #111111;")
+        qr_lay.addWidget(img_lbl)
+        layout.addWidget(qr_frame, alignment=QtCore.Qt.AlignCenter)
 
         url_lbl = QtWidgets.QLabel(url)
         url_lbl.setAlignment(QtCore.Qt.AlignCenter)
         url_lbl.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
         url_lbl.setStyleSheet(
-            "font-family: monospace; font-size: 13px; color: #0078d4; padding: 4px;"
+            "font-family: monospace; font-size: 13px; color: #0a84ff; padding: 4px;"
         )
         layout.addWidget(url_lbl)
 
@@ -534,9 +540,10 @@ class QrPreviewDialog(QtWidgets.QDialog):
             )
             warn.setWordWrap(True)
             warn.setAlignment(QtCore.Qt.AlignCenter)
-            warn.setStyleSheet("font-size: 12px; color: #b45309;")
+            warn.setStyleSheet("font-size: 12px; color: #ff9f0a;")
             layout.addWidget(warn)
 
         close_btn = QtWidgets.QPushButton("Close")
+        close_btn.setObjectName("SecondaryButton")
         close_btn.clicked.connect(self.accept)
         layout.addWidget(close_btn, alignment=QtCore.Qt.AlignCenter)

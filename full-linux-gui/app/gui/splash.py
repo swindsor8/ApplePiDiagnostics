@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# Splash screen module for Apple Pi Diagnostics
+"""Modern splash screen with live pre-boot checks for Apple Pi Diagnostics."""
+from __future__ import annotations
 
 import socket
-import os
 from pathlib import Path
 from PyQt5 import QtWidgets, QtGui, QtCore
 
@@ -50,7 +50,7 @@ def _check_system_info():
 
 def _check_storage():
     """Check if a primary storage device is accessible."""
-    candidates = ["/dev/mmcblk0", "/dev/sda", "/dev/nvme0n1"]
+    candidates = ["/dev/mmcblk0", "/dev/nvme0n1", "/dev/sda"]
     for dev in candidates:
         if Path(dev).exists():
             label = "SD card" if "mmcblk" in dev else "NVMe" if "nvme" in dev else "USB/SATA disk"
@@ -68,15 +68,11 @@ def _check_network():
                 continue
             if s.isup:
                 addrs = psutil.net_if_addrs().get(name, [])
-                ip = next(
-                    (a.address for a in addrs if a.family == 2),  # AF_INET
-                    None,
-                )
+                ip = next((a.address for a in addrs if a.family == socket.AF_INET), None)
                 detail = f"{name} UP" + (f" · {ip}" if ip else "")
                 return True, detail
         return False, "No active network interfaces"
     except Exception:
-        # psutil not available — fall back to /sys
         sys_net = Path("/sys/class/net")
         if sys_net.exists():
             for iface in sys_net.iterdir():
@@ -113,18 +109,18 @@ def _check_diagnostics():
 
 
 _CHECKS = [
-    ("System Info",      _check_system_info),
-    ("Storage Media",    _check_storage),
-    ("Network",          _check_network),
-    ("Diagnostics Ready",_check_diagnostics),
+    ("System Info", _check_system_info),
+    ("Storage Media", _check_storage),
+    ("Network", _check_network),
+    ("Diagnostics Ready", _check_diagnostics),
 ]
 
 # ---------------------------------------------------------------------------
-# Splash screen
+# Splash screen (opaque sleek card — renders cleanly even without X11 compositor)
 # ---------------------------------------------------------------------------
 
 class SplashScreen(QtWidgets.QDialog):
-    def __init__(self, parent=None, duration_ms=2500):
+    def __init__(self, parent=None, duration_ms=1800):
         super().__init__(parent)
         self.duration_ms = duration_ms
         self._results = []
@@ -138,74 +134,82 @@ class SplashScreen(QtWidgets.QDialog):
             | QtCore.Qt.FramelessWindowHint
             | QtCore.Qt.WindowStaysOnTopHint
         )
-        self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #11161f;
+                border: 1px solid #293241;
+                border-radius: 14px;
+            }
+        """)
         self._build_ui()
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 16)
+        layout.setContentsMargins(32, 28, 32, 24)
         layout.setSpacing(10)
 
         # Logo
         logo_label = QtWidgets.QLabel()
         logo_label.setAlignment(QtCore.Qt.AlignCenter)
         if LOGO_PATH and LOGO_PATH.exists():
-            pix = QtGui.QPixmap(str(LOGO_PATH))
-            pix = pix.scaledToWidth(280, QtCore.Qt.SmoothTransformation)
+            pix = QtGui.QPixmap(str(LOGO_PATH)).scaled(
+                96, 96, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+            )
             logo_label.setPixmap(pix)
         else:
-            logo_label.setText("[Apple Pi Diagnostics]")
-            logo_label.setStyleSheet("font-size:20px; font-weight:600; color:#ffffff;")
+            logo_label.setText("APD")
+            logo_label.setStyleSheet("font-size: 28px; font-weight: 700; color: #0a84ff;")
         layout.addWidget(logo_label, alignment=QtCore.Qt.AlignCenter)
 
-        # Title + version
+        # Title + version pill
         title = QtWidgets.QLabel("Apple Pi Diagnostics")
         title.setAlignment(QtCore.Qt.AlignCenter)
-        title.setStyleSheet("""
-            font-family: system-ui, 'Noto Sans', 'Inter', Arial, sans-serif;
-            font-size: 26px;
-            font-weight: 600;
-            color: #ffffff;
-        """)
-        layout.addWidget(title, alignment=QtCore.Qt.AlignCenter)
+        title.setStyleSheet("font-size: 22px; font-weight: 700; color: #f0f6fc;")
+        layout.addWidget(title)
 
-        ver_lbl = QtWidgets.QLabel(f"Version {APP_VERSION}")
+        ver_lbl = QtWidgets.QLabel(f"Hardware Diagnostic Suite  ·  {APP_VERSION}")
         ver_lbl.setAlignment(QtCore.Qt.AlignCenter)
-        ver_lbl.setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.75);")
-        layout.addWidget(ver_lbl, alignment=QtCore.Qt.AlignCenter)
+        ver_lbl.setStyleSheet("font-size: 12px; color: #9da7b3;")
+        layout.addWidget(ver_lbl)
 
-        # Divider
-        div = QtWidgets.QFrame()
-        div.setFrameShape(QtWidgets.QFrame.HLine)
-        div.setStyleSheet("color: rgba(255,255,255,0.25);")
-        layout.addWidget(div)
+        # Progress bar
+        self._progress = QtWidgets.QProgressBar()
+        self._progress.setRange(0, len(_CHECKS))
+        self._progress.setValue(0)
+        self._progress.setTextVisible(False)
+        self._progress.setFixedHeight(6)
+        self._progress.setStyleSheet("""
+            QProgressBar { background-color: #242c38; border: none; border-radius: 3px; }
+            QProgressBar::chunk { background-color: #0a84ff; border-radius: 3px; }
+        """)
+        layout.addWidget(self._progress)
 
-        # Check items container
-        checks_container = QtWidgets.QWidget()
-        checks_layout = QtWidgets.QVBoxLayout(checks_container)
-        checks_layout.setContentsMargins(8, 4, 8, 4)
+        # Checks container
+        checks_box = QtWidgets.QFrame()
+        checks_box.setStyleSheet(
+            "QFrame { background-color: #161b22; border: 1px solid #293241; border-radius: 10px; }"
+        )
+        checks_layout = QtWidgets.QVBoxLayout(checks_box)
+        checks_layout.setContentsMargins(14, 10, 14, 10)
         checks_layout.setSpacing(6)
 
         for name, _ in _CHECKS:
             lbl = QtWidgets.QLabel(f"○  Checking {name}…")
-            lbl.setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.5);")
+            lbl.setStyleSheet("font-size: 12px; color: #6e7681; background: transparent;")
             checks_layout.addWidget(lbl)
             self._check_labels.append(lbl)
 
-        layout.addWidget(checks_container)
+        layout.addWidget(checks_box)
 
-        # Size
-        screen = QtWidgets.QApplication.primaryScreen().availableGeometry()
-        w = min(520, screen.width() - 200)
-        h = min(400, screen.height() - 200)
-        self.setFixedSize(w, h)
-        self._center_on_screen()
-
-    def _center_on_screen(self):
-        screen = QtWidgets.QApplication.primaryScreen().availableGeometry()
-        x = (screen.width() - self.width()) // 2
-        y = (screen.height() - self.height()) // 2
-        self.move(x, y)
+        screen = QtWidgets.QApplication.primaryScreen()
+        if screen:
+            geo = screen.availableGeometry()
+            w = min(480, max(360, geo.width() - 80))
+            h = min(380, max(320, geo.height() - 80))
+            self.setFixedSize(w, h)
+            self.move(geo.x() + (geo.width() - w) // 2, geo.y() + (geo.height() - h) // 2)
+        else:
+            self.setFixedSize(460, 360)
 
     def _run_next_check(self):
         idx = self._check_index
@@ -217,9 +221,7 @@ class SplashScreen(QtWidgets.QDialog):
 
         name, fn = _CHECKS[idx]
         lbl = self._check_labels[idx]
-
-        # Mark as running
-        lbl.setStyleSheet("font-size: 12px; color: #93c5fd;")
+        lbl.setStyleSheet("font-size: 12px; color: #409cff; background: transparent;")
         lbl.setText(f"⟳  Checking {name}…")
         QtWidgets.QApplication.processEvents()
 
@@ -229,17 +231,17 @@ class SplashScreen(QtWidgets.QDialog):
             passed, detail = False, str(e)
 
         self._results.append({"name": name, "passed": passed, "detail": detail})
+        self._progress.setValue(idx + 1)
 
         if passed:
-            lbl.setStyleSheet("font-size: 12px; color: #10b981; font-weight: 500;")
+            lbl.setStyleSheet("font-size: 12px; color: #30d158; font-weight: 600; background: transparent;")
             lbl.setText(f"✓  {name}: {detail}")
         else:
-            lbl.setStyleSheet("font-size: 12px; color: #f59e0b; font-weight: 500;")
+            lbl.setStyleSheet("font-size: 12px; color: #ff9f0a; font-weight: 600; background: transparent;")
             lbl.setText(f"⚠  {name}: {detail}")
 
         self._check_index += 1
-        # Run next check after a short pause so the UI updates visibly
-        QtCore.QTimer.singleShot(200, self._run_next_check)
+        QtCore.QTimer.singleShot(140, self._run_next_check)
 
     def _on_min_time_elapsed(self):
         self._close_pending = True
@@ -249,9 +251,7 @@ class SplashScreen(QtWidgets.QDialog):
     def exec_and_wait(self):
         """Show splash, run pre-boot checks, wait for minimum duration, return results."""
         self.show()
-        # Start checks after a brief delay so the window renders first
-        QtCore.QTimer.singleShot(150, self._run_next_check)
-        # Minimum display time
+        QtCore.QTimer.singleShot(100, self._run_next_check)
         QtCore.QTimer.singleShot(self.duration_ms, self._on_min_time_elapsed)
         self.exec_()
         return self._results

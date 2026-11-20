@@ -1,40 +1,47 @@
 #!/usr/bin/env python3
-"""
-Apple Pi Diagnostics - Full Linux GUI (ASUS MyASus-style Dashboard)
-Run: source ../venv/bin/activate && python3 main.py
-"""
-import os
-import platform
-import socket
-import sys
-import threading
-from pathlib import Path
-from datetime import datetime
+"""Apple Pi Diagnostics — Modern Hardware Diagnostic Suite (PyQt5)."""
+from __future__ import annotations
+
 from copy import deepcopy
-from PyQt5 import QtWidgets, QtCore, QtGui
+from datetime import datetime
+import os
+from pathlib import Path
+import platform
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from typing import Any, Dict, List
+
+from PyQt5 import QtCore, QtGui, QtWidgets
+
 from config import APP_VERSION, GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT, NETWORK_DNS_CHECK_HOST
-from exports.export_usb import save_report_to_usb
-from exports.export_sd_boot import save_report_to_sdboot
-from exports.export_qr import QRExportManager, generate_qr_image
-from diagnostics.report_builder import build_report
+from diagnostics.bootloader.bootloader_test import run_bootloader_quick_test
 from diagnostics.cpu.cpu_test import run_cpu_quick_test
-from diagnostics.ram.ram_test import run_ram_quick_test
+from diagnostics.gpio.gpio_test import run_gpio_quick_test
+from diagnostics.hdmi.hdmi_test import run_hdmi_quick_test
 from diagnostics.network.network_test import run_network_quick_test
+from diagnostics.peripherals.peripherals_test import run_peripherals_quick_test
+from diagnostics.power.power_test import run_power_quick_test
+from diagnostics.ram.ram_test import run_ram_quick_test
+from diagnostics.report_builder import build_report
 from diagnostics.storage.storage_test import run_storage_quick_test
 from diagnostics.usb.usb_test import run_usb_quick_test
-from diagnostics.hdmi.hdmi_test import run_hdmi_quick_test
-from diagnostics.gpio.gpio_test import run_gpio_quick_test
-from diagnostics.power.power_test import run_power_quick_test
-from diagnostics.bootloader.bootloader_test import run_bootloader_quick_test
-from diagnostics.peripherals.peripherals_test import run_peripherals_quick_test
+from exports.export_qr import QRExportManager, generate_qr_image
+from exports.export_sd_boot import save_report_to_sdboot
+from exports.export_usb import save_report_to_usb
+from gui.theme import THEMES, build_stylesheet, make_svg_icon
 from gui.tools_dialogs import (
     GpioPinoutDialog,
     HdmiPatternDialog,
     QrPreviewDialog,
     WifiConnectDialog,
 )
+from gui.widgets import DiagnosticCard, HealthRingWidget, TelemetryTile, ToolActionCard
 
-# Try to reuse the splash module's logo discovery so the app icon matches the splash
 try:
     from gui.splash import LOGO_PATH
 except Exception:
@@ -43,7 +50,7 @@ except Exception:
 APP_DIR = Path(__file__).resolve().parents[1]
 
 
-def _get_report_dir():
+def _get_report_dir() -> Path:
     report_dir = Path(
         os.environ.get("APD_REPORT_DIR") or APP_DIR / "reports"
     ).expanduser()
@@ -53,1175 +60,1301 @@ def _get_report_dir():
 
 REPORT_DIR = _get_report_dir()
 
-# ---------------------------------------------------------------------------
-# SVG icon helpers
-# ---------------------------------------------------------------------------
+# Diagnostic module catalogue: (id, title, subtitle, icon_key, category)
+_DIAGNOSTIC_SPECS = [
+    ("cpu", "CPU", "Multi-core load & temp", "cpu", "Core"),
+    ("ram", "RAM", "Pattern write & verify", "ram", "Core"),
+    ("sd", "Storage", "Speed, CID & SMART", "sd", "Core"),
+    ("power", "Power & Thermal", "Voltage & throttling", "power", "Core"),
+    ("network", "Network", "Interfaces, ping & DNS", "network", "I/O & Display"),
+    ("usb", "USB", "Bus & device scan", "usb", "I/O & Display"),
+    ("hdmi", "HDMI", "Display & KMS check", "hdmi", "I/O & Display"),
+    ("gpio", "GPIO", "Header driver probe", "gpio", "I/O & Display"),
+    ("bootloader", "Bootloader", "EEPROM & /boot health", "bootloader", "System"),
+    ("peripherals", "Peripherals", "I2C, SPI, BT, Audio, Cam", "peripherals", "System"),
+]
 
-# Feather-style SVG icons — stroke-based, colour driven by `currentColor`
-_SVG_ICONS = {
-    "cpu": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="4" y="4" width="16" height="16" rx="2"/>
-        <rect x="9" y="9" width="6" height="6"/>
-        <line x1="9" y1="1" x2="9" y2="4"/>
-        <line x1="15" y1="1" x2="15" y2="4"/>
-        <line x1="9" y1="20" x2="9" y2="23"/>
-        <line x1="15" y1="20" x2="15" y2="23"/>
-        <line x1="20" y1="9" x2="23" y2="9"/>
-        <line x1="20" y1="14" x2="23" y2="14"/>
-        <line x1="1" y1="9" x2="4" y2="9"/>
-        <line x1="1" y1="14" x2="4" y2="14"/>
-    </svg>""",
+_TEST_LABELS = {spec[0]: spec[1] for spec in _DIAGNOSTIC_SPECS}
 
-    "ram": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="8" width="20" height="8" rx="2"/>
-        <line x1="6" y1="8" x2="6" y2="16"/>
-        <line x1="10" y1="8" x2="10" y2="16"/>
-        <line x1="14" y1="8" x2="14" y2="16"/>
-        <line x1="18" y1="8" x2="18" y2="16"/>
-        <line x1="6" y1="5" x2="6" y2="8"/>
-        <line x1="10" y1="5" x2="10" y2="8"/>
-        <line x1="14" y1="5" x2="14" y2="8"/>
-        <line x1="18" y1="5" x2="18" y2="8"/>
-    </svg>""",
-
-    "sd": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <ellipse cx="12" cy="5" rx="9" ry="3"/>
-        <path d="M3 5v5c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/>
-        <path d="M3 10v5c0 1.66 4.03 3 9 3s9-1.34 9-3v-5"/>
-        <path d="M3 15v4c0 1.66 4.03 3 9 3s9-1.34 9-3v-4"/>
-    </svg>""",
-
-    "network": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="2" y1="12" x2="22" y2="12"/>
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10
-                 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-    </svg>""",
-
-    "usb": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 2v11"/>
-        <polyline points="8 6 12 2 16 6"/>
-        <circle cx="8" cy="17" r="2"/>
-        <circle cx="16" cy="15" r="2"/>
-        <path d="M12 13H8a2 2 0 0 0-2 2v2"/>
-        <path d="M12 13h4a2 2 0 0 0 2-2v-2"/>
-    </svg>""",
-
-    "hdmi": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="3" width="20" height="13" rx="2"/>
-        <line x1="8" y1="21" x2="16" y2="21"/>
-        <line x1="12" y1="16" x2="12" y2="21"/>
-    </svg>""",
-
-    "gpio": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="3"/>
-        <line x1="12" y1="2" x2="12" y2="9"/>
-        <line x1="12" y1="15" x2="12" y2="22"/>
-        <line x1="2" y1="12" x2="9" y2="12"/>
-        <line x1="15" y1="12" x2="22" y2="12"/>
-        <line x1="4.22" y1="4.22" x2="6.34" y2="6.34"/>
-        <line x1="17.66" y1="17.66" x2="19.78" y2="19.78"/>
-    </svg>""",
-
-    "sun": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="5"/>
-        <line x1="12" y1="1" x2="12" y2="3"/>
-        <line x1="12" y1="21" x2="12" y2="23"/>
-        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-        <line x1="1" y1="12" x2="3" y2="12"/>
-        <line x1="21" y1="12" x2="23" y2="12"/>
-        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-    </svg>""",
-
-    "moon": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-    </svg>""",
-
-    "refresh": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="23 4 23 10 17 10"/>
-        <polyline points="1 20 1 14 7 14"/>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-    </svg>""",
-
-    "save": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-        <polyline points="17 21 17 13 7 13 7 21"/>
-        <polyline points="7 3 7 8 15 8"/>
-    </svg>""",
-
-    "folder": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-    </svg>""",
-
-    "power": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-    </svg>""",
-
-    "bootloader": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-    </svg>""",
-
-    "peripherals": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
-        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <rect x="2" y="7" width="20" height="10" rx="2"/>
-        <circle cx="7" cy="12" r="1.5"/>
-        <circle cx="12" cy="12" r="1.5"/>
-        <circle cx="17" cy="12" r="1.5"/>
-    </svg>""",
-}
-
-
-def _make_svg_pixmap(icon_key, size=20, color="#888888"):
-    """Render a named SVG icon to a QPixmap at the requested size and colour."""
-    svg_str = _SVG_ICONS.get(icon_key, "")
-    if not svg_str:
-        return None
-    try:
-        from PyQt5 import QtSvg
-        colored = svg_str.replace("currentColor", color)
-        renderer = QtSvg.QSvgRenderer(QtCore.QByteArray(colored.encode()))
-        pixmap = QtGui.QPixmap(size, size)
-        pixmap.fill(QtCore.Qt.transparent)
-        painter = QtGui.QPainter(pixmap)
-        renderer.render(painter)
-        painter.end()
-        return pixmap
-    except Exception:
-        return None
-
-
-class LogoBackgroundPage(QtWidgets.QWidget):
-    """Tab page widget that paints the Apple Pi logo as a 50% opacity watermark."""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._logo_pixmap = None
-        if LOGO_PATH and LOGO_PATH.exists():
-            self._logo_pixmap = QtGui.QPixmap(str(LOGO_PATH))
-
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        if not self._logo_pixmap or self._logo_pixmap.isNull():
-            return
-        painter = QtGui.QPainter(self)
-        painter.setOpacity(0.5)
-        logo_size = min(self.width(), self.height()) // 2
-        scaled = self._logo_pixmap.scaled(
-            logo_size, logo_size,
-            QtCore.Qt.KeepAspectRatio,
-            QtCore.Qt.SmoothTransformation,
-        )
-        x = (self.width() - scaled.width()) // 2
-        y = (self.height() - scaled.height()) // 2
-        painter.drawPixmap(x, y, scaled)
-        painter.end()
-
-
-class StartupBanner(QtWidgets.QWidget):
-    """Dismissible banner shown after launch summarising pre-boot check results."""
-
-    AUTO_DISMISS_MS = 30000
-
-    def __init__(self, results, parent=None):
-        super().__init__(parent)
-        self._results = results
-        self._expanded = False
-        self._detail_widget = None
-        self._auto_timer = QtCore.QTimer(self)
-        self._auto_timer.setSingleShot(True)
-        self._auto_timer.timeout.connect(self.hide)
-        self._build_ui()
-
-    def _build_ui(self):
-        passed = sum(1 for r in self._results if r.get("passed"))
-        total = len(self._results)
-        all_ok = passed == total
-
-        if all_ok:
-            bg, border, text_col = "#dcfce7", "#10b981", "#166534"
-            icon = "✓"
-            summary = f"Pre-boot checks: {passed} / {total} passed"
-        else:
-            bg, border, text_col = "#fef9c3", "#f59e0b", "#713f12"
-            icon = "⚠"
-            summary = f"Pre-boot checks: {passed} / {total} passed"
-
-        self._text_col = text_col
-
-        self.setStyleSheet(f"""
-            StartupBanner {{
-                background-color: {bg};
-                border-left: 4px solid {border};
-            }}
-        """)
-
-        outer = QtWidgets.QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-
-        # --- collapsed row ---
-        row = QtWidgets.QWidget()
-        row.setStyleSheet("background: transparent;")
-        row_layout = QtWidgets.QHBoxLayout(row)
-        row_layout.setContentsMargins(12, 6, 8, 6)
-        row_layout.setSpacing(8)
-
-        icon_lbl = QtWidgets.QLabel(icon)
-        icon_lbl.setStyleSheet(f"font-size: 14px; color: {text_col}; background: transparent;")
-        row_layout.addWidget(icon_lbl)
-
-        summary_lbl = QtWidgets.QLabel(summary)
-        summary_lbl.setStyleSheet(f"font-size: 12px; color: {text_col}; font-weight: 600; background: transparent;")
-        row_layout.addWidget(summary_lbl)
-        row_layout.addStretch()
-
-        btn_style = f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                font-size: 11px;
-                color: {text_col};
-                padding: 2px 6px;
-            }}
-            QPushButton:hover {{ text-decoration: underline; }}
-        """
-
-        self._toggle_btn = QtWidgets.QPushButton("▼ Details")
-        self._toggle_btn.setStyleSheet(btn_style)
-        self._toggle_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        self._toggle_btn.clicked.connect(self._toggle_details)
-        row_layout.addWidget(self._toggle_btn)
-
-        close_btn = QtWidgets.QPushButton("✕")
-        close_btn.setStyleSheet(btn_style)
-        close_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
-        close_btn.clicked.connect(self.hide)
-        row_layout.addWidget(close_btn)
-
-        outer.addWidget(row)
-
-        # --- detail rows (hidden by default) ---
-        self._detail_widget = QtWidgets.QWidget()
-        self._detail_widget.setStyleSheet("background: transparent;")
-        detail_layout = QtWidgets.QVBoxLayout(self._detail_widget)
-        detail_layout.setContentsMargins(36, 0, 12, 8)
-        detail_layout.setSpacing(2)
-
-        for r in self._results:
-            chk_icon = "✓" if r.get("passed") else "⚠"
-            chk_col = "#166534" if r.get("passed") else "#713f12"
-            lbl = QtWidgets.QLabel(f"{chk_icon}  {r['name']}: {r['detail']}")
-            lbl.setStyleSheet(f"font-size: 11px; color: {chk_col}; background: transparent;")
-            detail_layout.addWidget(lbl)
-
-        self._detail_widget.setVisible(False)
-        outer.addWidget(self._detail_widget)
-
-    def _toggle_details(self):
-        self._expanded = not self._expanded
-        self._detail_widget.setVisible(self._expanded)
-        self._toggle_btn.setText("▲ Details" if self._expanded else "▼ Details")
-        self.adjustSize()
-
-    def show(self):
-        super().show()
-        self._auto_timer.start(self.AUTO_DISMISS_MS)
-
-    def hide(self):
-        self._auto_timer.stop()
-        super().hide()
-
-
-class StatusCard(QtWidgets.QWidget):
-    """Card widget for displaying diagnostic test status (ASUS MyASus style)"""
-    
-    def __init__(self, title, icon_key="cpu", parent=None):
-        super().__init__(parent)
-        self.title = title
-        self.icon_key = icon_key
-        self.status = "PENDING"
-        self.details = ""
-        self.flat_mode = False  # Set True for overview cards (no box, bigger text)
-        self._build_ui()
-
-    def _build_ui(self):
-        self.setFixedSize(200, 160)
-
-        layout = QtWidgets.QVBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(8)
-
-        # Icon and title
-        header = QtWidgets.QHBoxLayout()
-        self.icon_label = QtWidgets.QLabel()
-        self.icon_label.setFixedSize(22, 22)
-        self.set_icon_color("#888888")
-        header.addWidget(self.icon_label)
-        
-        title_label = QtWidgets.QLabel(self.title)
-        title_label.setObjectName("card_title")
-        header.addWidget(title_label)
-        header.addStretch()
-        layout.addLayout(header)
-        
-        # Status indicator
-        self.status_label = QtWidgets.QLabel("Pending")
-        self.status_label.setObjectName("card_status")
-        layout.addWidget(self.status_label)
-        
-        # Details
-        self.details_label = QtWidgets.QLabel("")
-        self.details_label.setObjectName("card_details")
-        self.details_label.setWordWrap(True)
-        layout.addWidget(self.details_label)
-        
-        layout.addStretch()
-        
-        # Test button
-        self.test_btn = QtWidgets.QPushButton("Test")
-        self.test_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 6px 16px;
-                font-size: 12px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        layout.addWidget(self.test_btn)
-        
-    @QtCore.pyqtSlot(str, str)
-    def set_status(self, status, details=""):
-        """Update status with color coding"""
-        self.status = status
-        self.details = details
-        
-        if status == "OK" or status == "PASS":
-            color = "#10b981"  # Green
-            text = "✓ Normal"
-        elif status == "FAIL" or status == "ERROR":
-            color = "#ef4444"  # Red
-            text = "✗ Failed"
-        elif status == "WARNING":
-            color = "#f59e0b"  # Amber
-            text = "⚠ Warning"
-        elif status == "UNSUPPORTED":
-            color = "#f59e0b"  # Orange
-            text = "— Unsupported"
-        elif status == "RUNNING":
-            color = "#3b82f6"  # Blue
-            text = "⟳ Running..."
-        else:
-            color = "#6b7280"  # Gray
-            text = "○ Pending"
-            
-        self.status_label.setText(text)
-        font_size = "14px" if self.flat_mode else "12px"
-        self.status_label.setStyleSheet(f"""
-            font-size: {font_size};
-            color: {color};
-            font-weight: 600;
-        """)
-        
-        if details:
-            self.details_label.setText(details[:50] + "..." if len(details) > 50 else details)
-        else:
-            self.details_label.setText("")
-
-    def set_icon_color(self, color):
-        """Re-render the card icon in the given colour."""
-        pixmap = _make_svg_pixmap(self.icon_key, size=22, color=color)
-        if pixmap:
-            self.icon_label.setPixmap(pixmap)
+_PAGE_META = [
+    ("Dashboard", "Live hardware telemetry, board identity, and overall health"),
+    ("Diagnostics", "Run individual hardware modules or execute the full verification suite"),
+    ("Hardware Tools", "Interactive display patterns, 40-pin GPIO viewer, and Wi-Fi setup"),
+    ("Results & Export", "Review plain-English findings and export PDF, USB, SD, or QR reports"),
+    ("Settings", "Appearance, network diagnostics, report location, and device power"),
+]
 
 
 class MainWindow(QtWidgets.QMainWindow):
-    sig_append = QtCore.pyqtSignal(str)
-    sig_set_button_enabled = QtCore.pyqtSignal(bool)
+    """Modern sidebar-driven dashboard for Apple Pi Diagnostics."""
+
+    sig_test_finished = QtCore.pyqtSignal(str, dict)
 
     def __init__(self):
         super().__init__()
+        self.theme_name = "dark"
         self.latest_report_dir = None
         self.qr_manager = None
-        self.test_cards = {}
-        self.overview_cards = {}
-        self.test_results = {}
+        self.test_cards: Dict[str, DiagnosticCard] = {}
+        self.test_results: Dict[str, Dict[str, Any]] = {}
         self.results_lock = threading.Lock()
-        self.sys_info_card = None
-        self.sys_info_labels = []
-        self.startup_banner = None
+        self._running_tests: set[str] = set()
+        self._startup_results: List[Dict[str, Any]] = []
+        self._active_category = "All"
+
         self.setWindowTitle(f"Apple Pi Diagnostics ({APP_VERSION})")
-        self.setMinimumSize(1000, 700)
-        self._build_ui()
+        self.setMinimumSize(1024, 680)
         if LOGO_PATH and Path(LOGO_PATH).exists():
             self.setWindowIcon(QtGui.QIcon(str(LOGO_PATH)))
-        
-        # Load system info and start live telemetry refresh
+
+        self.sig_test_finished.connect(self._on_test_finished)
+
+        self._build_ui()
+        self._apply_theme(self.theme_name)
         self._update_system_info()
+        self._refresh_network_info()
+
+        # Live telemetry every 2 seconds
         self._telemetry_timer = QtCore.QTimer(self)
         self._telemetry_timer.timeout.connect(self._update_live_telemetry)
         self._update_live_telemetry()
         self._telemetry_timer.start(2000)
 
+    # -----------------------------------------------------------------------
+    # Shell Construction
+    # -----------------------------------------------------------------------
+
     def _build_ui(self):
-        # Central widget with main layout
-        central = QtWidgets.QWidget()
-        self.setCentralWidget(central)
-        main_layout = QtWidgets.QVBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
-        
-        # Header bar (ASUS MyASus style)
-        header = self._create_header()
-        main_layout.addWidget(header)
+        root = QtWidgets.QWidget()
+        root.setObjectName("AppRoot")
+        self.setCentralWidget(root)
 
-        # Banner slot — filled by show_startup_banner() after window is shown
-        self._banner_container = QtWidgets.QWidget()
-        self._banner_container.setVisible(False)
-        self._banner_layout = QtWidgets.QVBoxLayout(self._banner_container)
-        self._banner_layout.setContentsMargins(0, 0, 0, 0)
-        self._banner_layout.setSpacing(0)
-        main_layout.addWidget(self._banner_container)
+        outer = QtWidgets.QHBoxLayout(root)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
 
-        # Create tab widget for pages
-        self.tabs = QtWidgets.QTabWidget()
-        self._update_tab_style()
-        
-        # Overview page
-        overview_page = self._create_overview_page()
-        self.tabs.addTab(overview_page, "Overview")
-        
-        # Testing page
-        testing_page = self._create_testing_page()
-        self.tabs.addTab(testing_page, "Testing")
-        
-        # Results page
-        results_page = self._create_results_page()
-        self.tabs.addTab(results_page, "Results")
-        
-        # Settings page
-        settings_page = self._create_settings_page()
-        self.tabs.addTab(settings_page, "Settings")
-        
-        main_layout.addWidget(self.tabs)
-        
-        # Apply initial theme
-        self._apply_theme()
-        
-        # Status bar
-        self.statusBar().showMessage("Ready")
+        # Left navigation sidebar
+        outer.addWidget(self._create_sidebar())
 
-    def _create_header(self):
-        """Create ASUS MyASus-style header bar"""
-        header = QtWidgets.QWidget()
-        header.setFixedHeight(60)
-        header.setStyleSheet("""
-            QWidget {
-                background-color: #ffffff;
-                border-bottom: 1px solid #e0e0e0;
-            }
-        """)
-        
-        layout = QtWidgets.QHBoxLayout(header)
-        layout.setContentsMargins(20, 0, 20, 0)
-        
-        # Logo/Title + Version badge
-        title_label = QtWidgets.QLabel("Apple Pi Diagnostics")
-        title_label.setStyleSheet("""
-            font-size: 20px;
-            font-weight: 600;
-            color: #1a1a1a;
-        """)
-        layout.addWidget(title_label)
+        # Right main column: top bar + progress strip + stacked pages
+        right_col = QtWidgets.QVBoxLayout()
+        right_col.setContentsMargins(0, 0, 0, 0)
+        right_col.setSpacing(0)
 
-        version_badge = QtWidgets.QLabel(APP_VERSION)
-        version_badge.setObjectName("version_badge")
-        version_badge.setStyleSheet("""
-            font-size: 11px;
-            font-weight: 600;
-            color: #0078d4;
-            background-color: #e8f3fc;
-            border: 1px solid #b6daf7;
-            border-radius: 10px;
-            padding: 2px 8px;
-            margin-left: 8px;
-        """)
-        layout.addWidget(version_badge)
-        
+        right_col.addWidget(self._create_top_bar())
+
+        self._suite_progress = QtWidgets.QProgressBar()
+        self._suite_progress.setFixedHeight(3)
+        self._suite_progress.setTextVisible(False)
+        self._suite_progress.setRange(0, len(_DIAGNOSTIC_SPECS))
+        self._suite_progress.setValue(0)
+        self._suite_progress.setVisible(False)
+        right_col.addWidget(self._suite_progress)
+
+        self.pages = QtWidgets.QStackedWidget()
+        self.pages.addWidget(self._create_dashboard_page())
+        self.pages.addWidget(self._create_diagnostics_page())
+        self.pages.addWidget(self._create_tools_page())
+        self.pages.addWidget(self._create_results_page())
+        self.pages.addWidget(self._create_settings_page())
+        right_col.addWidget(self.pages, stretch=1)
+
+        outer.addLayout(right_col, stretch=1)
+
+        self._switch_page(0)
+        self.statusBar().showMessage(f"Ready  ·  Apple Pi Diagnostics {APP_VERSION}")
+
+    def _create_sidebar(self) -> QtWidgets.QWidget:
+        sidebar = QtWidgets.QWidget()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(226)
+
+        layout = QtWidgets.QVBoxLayout(sidebar)
+        layout.setContentsMargins(14, 18, 14, 16)
+        layout.setSpacing(6)
+
+        # Brand block
+        brand_row = QtWidgets.QHBoxLayout()
+        brand_row.setSpacing(10)
+        logo_lbl = QtWidgets.QLabel()
+        logo_lbl.setFixedSize(36, 36)
+        logo_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        if LOGO_PATH and Path(LOGO_PATH).exists():
+            pix = QtGui.QPixmap(str(LOGO_PATH)).scaled(
+                34, 34, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
+            )
+            logo_lbl.setPixmap(pix)
+        else:
+            logo_lbl.setText("Pi")
+            logo_lbl.setStyleSheet("font-size: 16px; font-weight: 800; color: #0a84ff;")
+        brand_row.addWidget(logo_lbl)
+
+        brand_text = QtWidgets.QVBoxLayout()
+        brand_text.setSpacing(1)
+        b_title = QtWidgets.QLabel("Apple Pi")
+        b_title.setStyleSheet("font-size: 15px; font-weight: 800;")
+        b_sub = QtWidgets.QLabel("Diagnostics")
+        b_sub.setObjectName("MutedLabel")
+        brand_text.addWidget(b_title)
+        brand_text.addWidget(b_sub)
+        brand_row.addLayout(brand_text)
+        brand_row.addStretch()
+        layout.addLayout(brand_row)
+
+        ver_row = QtWidgets.QHBoxLayout()
+        ver_pill = QtWidgets.QLabel(APP_VERSION)
+        ver_pill.setObjectName("VersionPill")
+        ver_row.addWidget(ver_pill)
+        ver_row.addStretch()
+        layout.addLayout(ver_row)
+
+        layout.addSpacing(14)
+
+        # Navigation buttons
+        self._nav_buttons: List[tuple[QtWidgets.QPushButton, str]] = []
+        nav_items = [
+            ("Dashboard", "dashboard"),
+            ("Diagnostics", "diagnostics"),
+            ("Hardware Tools", "tools"),
+            ("Results & Export", "results"),
+            ("Settings", "settings"),
+        ]
+        for idx, (label, icon_key) in enumerate(nav_items):
+            btn = QtWidgets.QPushButton(f"  {label}")
+            btn.setObjectName("NavButton")
+            btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            btn.setIconSize(QtCore.QSize(17, 17))
+            btn.clicked.connect(lambda _checked=False, i=idx: self._switch_page(i))
+            layout.addWidget(btn)
+            self._nav_buttons.append((btn, icon_key))
+
         layout.addStretch()
-        
-        # Action buttons
-        btn_style = """
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 13px;
-                font-weight: 500;
-                margin-left: 6px;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-            QPushButton:pressed {
-                background-color: #005a9e;
-            }
-        """
-        subtle_btn_style = """
-            QPushButton {
-                background-color: #f3f4f6;
-                color: #1f2937;
-                border: 1px solid #d1d5db;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 12px;
-                font-weight: 500;
-                margin-left: 6px;
-            }
-            QPushButton:hover {
-                background-color: #e5e7eb;
-            }
-        """
-        danger_btn_style = """
-            QPushButton {
-                background-color: #fee2e2;
-                color: #991b1b;
-                border: 1px solid #fca5a5;
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 12px;
-                font-weight: 600;
-                margin-left: 6px;
-            }
-            QPushButton:hover {
-                background-color: #fecaca;
-            }
-        """
-        
-        self.run_all_btn = QtWidgets.QPushButton("Run All Tests")
-        self.run_all_btn.setStyleSheet(btn_style)
+
+        # Theme toggle
+        self._theme_btn = QtWidgets.QPushButton("  Light Mode")
+        self._theme_btn.setObjectName("SecondaryButton")
+        self._theme_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self._theme_btn.clicked.connect(self.toggle_theme)
+        layout.addWidget(self._theme_btn)
+
+        layout.addSpacing(4)
+
+        # Compact device power row
+        pwr_row = QtWidgets.QHBoxLayout()
+        pwr_row.setSpacing(6)
+        self._sidebar_reboot_btn = QtWidgets.QPushButton("Reboot")
+        self._sidebar_reboot_btn.setObjectName("SecondaryButton")
+        self._sidebar_reboot_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self._sidebar_reboot_btn.clicked.connect(lambda: self._confirm_system_power("reboot"))
+        pwr_row.addWidget(self._sidebar_reboot_btn)
+
+        self._sidebar_shutdown_btn = QtWidgets.QPushButton("Power Off")
+        self._sidebar_shutdown_btn.setObjectName("DangerButton")
+        self._sidebar_shutdown_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self._sidebar_shutdown_btn.clicked.connect(lambda: self._confirm_system_power("poweroff"))
+        pwr_row.addWidget(self._sidebar_shutdown_btn)
+        layout.addLayout(pwr_row)
+
+        return sidebar
+
+    def _create_top_bar(self) -> QtWidgets.QWidget:
+        bar = QtWidgets.QWidget()
+        bar.setObjectName("TopBar")
+        bar.setFixedHeight(68)
+
+        layout = QtWidgets.QHBoxLayout(bar)
+        layout.setContentsMargins(24, 10, 24, 10)
+        layout.setSpacing(10)
+
+        title_col = QtWidgets.QVBoxLayout()
+        title_col.setSpacing(1)
+        self._top_title = QtWidgets.QLabel("Dashboard")
+        self._top_title.setObjectName("PageTitle")
+        self._top_subtitle = QtWidgets.QLabel("")
+        self._top_subtitle.setObjectName("PageSubtitle")
+        title_col.addWidget(self._top_title)
+        title_col.addWidget(self._top_subtitle)
+        layout.addLayout(title_col)
+
+        layout.addStretch()
+
+        self.run_all_btn = QtWidgets.QPushButton("  Run All Tests")
+        self.run_all_btn.setObjectName("PrimaryButton")
+        self.run_all_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.run_all_btn.clicked.connect(self.run_all_tests)
         layout.addWidget(self.run_all_btn)
-        
-        self.export_btn = QtWidgets.QPushButton("Generate PDF")
-        self.export_btn.setStyleSheet(btn_style)
+
+        self.export_btn = QtWidgets.QPushButton("PDF Report")
+        self.export_btn.setObjectName("SecondaryButton")
+        self.export_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.export_btn.clicked.connect(self.generate_and_preview_pdf)
         layout.addWidget(self.export_btn)
 
         self.qr_btn = QtWidgets.QPushButton("QR Share")
-        self.qr_btn.setStyleSheet(subtle_btn_style)
+        self.qr_btn.setObjectName("SecondaryButton")
+        self.qr_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
         self.qr_btn.clicked.connect(self.export_qr)
         layout.addWidget(self.qr_btn)
 
-        self.reboot_btn = QtWidgets.QPushButton("Reboot")
-        self.reboot_btn.setStyleSheet(subtle_btn_style)
-        self.reboot_btn.clicked.connect(lambda: self._confirm_system_power("reboot"))
-        layout.addWidget(self.reboot_btn)
+        return bar
 
-        self.shutdown_btn = QtWidgets.QPushButton("Shut Down")
-        self.shutdown_btn.setStyleSheet(danger_btn_style)
-        self.shutdown_btn.clicked.connect(lambda: self._confirm_system_power("poweroff"))
-        layout.addWidget(self.shutdown_btn)
-        
-        return header
+    # -----------------------------------------------------------------------
+    # Page 0: Dashboard
+    # -----------------------------------------------------------------------
 
-    def _create_overview_page(self):
-        """Create Overview page with system information"""
-        page = LogoBackgroundPage()
-        layout = QtWidgets.QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
-
-        # System information card
-        self.sys_info_card = self._create_system_info_card()
-        layout.addWidget(self.sys_info_card)
-
-        # Live telemetry strip (CPU / RAM / Temp / Power)
-        telemetry_card = QtWidgets.QWidget()
-        telemetry_card.setObjectName("setting_card")
-        telemetry_card.setStyleSheet("""
-            QWidget#setting_card {
-                background-color: #ffffff;
-                border-radius: 12px;
-                border: 1px solid #d8d8d8;
-            }
-        """)
-        t_layout = QtWidgets.QHBoxLayout(telemetry_card)
-        t_layout.setContentsMargins(20, 12, 20, 12)
-        t_layout.setSpacing(24)
-
-        self._telemetry_labels = {}
-        for key, title in (
-            ("cpu", "CPU Load"),
-            ("ram", "Memory"),
-            ("temp", "SoC Temp"),
-            ("power", "Power / Throttle"),
-        ):
-            col = QtWidgets.QVBoxLayout()
-            col.setSpacing(2)
-            k_lbl = QtWidgets.QLabel(title)
-            k_lbl.setObjectName("sys_info_label")
-            k_lbl.setStyleSheet("font-size: 11px; color: #666666; font-weight: 600;")
-            v_lbl = QtWidgets.QLabel("—")
-            v_lbl.setObjectName("sys_info_value")
-            v_lbl.setStyleSheet("font-size: 15px; color: #111111; font-weight: 700;")
-            col.addWidget(k_lbl)
-            col.addWidget(v_lbl)
-            t_layout.addLayout(col)
-            self._telemetry_labels[key] = v_lbl
-        t_layout.addStretch()
-        layout.addWidget(telemetry_card)
-
-        # Boot checks section label
-        checks_label = QtWidgets.QLabel("Boot Checks")
-        checks_label.setStyleSheet("""
-            font-size: 20px;
-            font-weight: 600;
-            color: #1a1a1a;
-            padding: 8px 0;
-        """)
-        layout.addWidget(checks_label)
-
-        # Placeholder populated by show_startup_banner()
-        self._overview_checks_panel = QtWidgets.QWidget()
-        self._overview_checks_panel.setStyleSheet("background: transparent;")
-        self._overview_checks_panel_layout = QtWidgets.QVBoxLayout(self._overview_checks_panel)
-        self._overview_checks_panel_layout.setContentsMargins(0, 0, 0, 0)
-        self._overview_checks_panel_layout.setSpacing(8)
-        waiting_lbl = QtWidgets.QLabel("Waiting for boot checks…")
-        waiting_lbl.setStyleSheet("font-size: 13px; color: #888888;")
-        self._overview_checks_panel_layout.addWidget(waiting_lbl)
-        layout.addWidget(self._overview_checks_panel)
-
-        layout.addStretch()
-        return page
-
-    def _create_testing_page(self):
-        """Create Testing page with test controls"""
-        page = LogoBackgroundPage()
-        layout = QtWidgets.QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
-        
-        # Instructions
-        info_label = QtWidgets.QLabel("Select individual tests to run, or use 'Run All Tests' to test everything.")
-        info_label.setObjectName("info_label")
-        info_label.setStyleSheet("""
-            font-size: 14px;
-            color: #444444;
-            padding: 4px 0 8px 0;
-        """)
-        layout.addWidget(info_label)
-        
-        # Test cards grid
-        tests_label = QtWidgets.QLabel("Hardware Diagnostics")
-        tests_label.setStyleSheet("""
-            font-size: 20px;
-            font-weight: 600;
-            color: #1a1a1a;
-            padding: 8px 0;
-        """)
-        layout.addWidget(tests_label)
-        
-        # Scrollable test cards grid (10 hardware modules)
+    def _create_dashboard_page(self) -> QtWidgets.QWidget:
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+        content = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(24, 22, 24, 24)
+        layout.setSpacing(18)
 
-        grid_container = QtWidgets.QWidget()
-        grid_container.setStyleSheet("background: transparent;")
-        tests_grid = QtWidgets.QGridLayout(grid_container)
-        tests_grid.setSpacing(16)
-        tests_grid.setContentsMargins(0, 0, 0, 0)
-        
-        tests = [
-            ("CPU", "cpu", "cpu"),
-            ("RAM", "ram", "ram"),
-            ("Storage", "sd", "sd"),
-            ("Power & Thermal", "power", "power"),
-            ("Network", "network", "network"),
-            ("USB", "usb", "usb"),
-            ("HDMI", "hdmi", "hdmi"),
-            ("GPIO", "gpio", "gpio"),
-            ("Bootloader", "bootloader", "bootloader"),
-            ("Peripherals", "peripherals", "peripherals"),
-        ]
-        
-        row, col = 0, 0
-        for title, icon, test_id in tests:
-            if test_id not in self.test_cards:
-                card = StatusCard(title, icon)
-                def make_test_handler(tid):
-                    return lambda checked: self.run_test(tid)
-                card.test_btn.clicked.connect(make_test_handler(test_id))
-                self.test_cards[test_id] = card
-            else:
-                card = self.test_cards[test_id]
-                card.test_btn.show()
-            tests_grid.addWidget(card, row, col)
-            col += 1
-            if col >= 5:
-                col = 0
-                row += 1
+        # Hero health summary card
+        hero = QtWidgets.QFrame()
+        hero.setObjectName("HeroCard")
+        hero_lay = QtWidgets.QHBoxLayout(hero)
+        hero_lay.setContentsMargins(22, 18, 22, 18)
+        hero_lay.setSpacing(22)
 
-        scroll.setWidget(grid_container)
+        self.health_ring = HealthRingWidget()
+        hero_lay.addWidget(self.health_ring)
+
+        hero_text = QtWidgets.QVBoxLayout()
+        hero_text.setSpacing(6)
+        self._hero_heading = QtWidgets.QLabel("System Ready for Diagnostics")
+        self._hero_heading.setStyleSheet("font-size: 20px; font-weight: 700;")
+        self._hero_detail = QtWidgets.QLabel(
+            "Run the full 10-module hardware verification suite or pick individual checks in Diagnostics."
+        )
+        self._hero_detail.setObjectName("PageSubtitle")
+        self._hero_detail.setWordWrap(True)
+        hero_text.addWidget(self._hero_heading)
+        hero_text.addWidget(self._hero_detail)
+
+        hero_btns = QtWidgets.QHBoxLayout()
+        hero_btns.setSpacing(10)
+        hero_run = QtWidgets.QPushButton("Start Full Verification")
+        hero_run.setObjectName("PrimaryButton")
+        hero_run.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        hero_run.clicked.connect(self.run_all_tests)
+        hero_btns.addWidget(hero_run)
+
+        hero_diag = QtWidgets.QPushButton("Browse 10 Modules")
+        hero_diag.setObjectName("SecondaryButton")
+        hero_diag.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        hero_diag.clicked.connect(lambda: self._switch_page(1))
+        hero_btns.addWidget(hero_diag)
+
+        hero_tools = QtWidgets.QPushButton("Open Hardware Tools")
+        hero_tools.setObjectName("SecondaryButton")
+        hero_tools.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        hero_tools.clicked.connect(lambda: self._switch_page(2))
+        hero_btns.addWidget(hero_tools)
+        hero_btns.addStretch()
+        hero_text.addSpacing(4)
+        hero_text.addLayout(hero_btns)
+        hero_lay.addLayout(hero_text, stretch=1)
+        layout.addWidget(hero)
+
+        # Live Telemetry row (4 tiles)
+        telem_row = QtWidgets.QHBoxLayout()
+        telem_row.setSpacing(14)
+        self._telemetry_tiles: Dict[str, TelemetryTile] = {
+            "cpu": TelemetryTile("CPU Load", "cpu"),
+            "ram": TelemetryTile("Memory Usage", "ram"),
+            "temp": TelemetryTile("SoC Temperature", "power"),
+            "power": TelemetryTile("Power & Throttle", "bootloader"),
+        }
+        for tile in self._telemetry_tiles.values():
+            telem_row.addWidget(tile)
+        layout.addLayout(telem_row)
+
+        # Bottom split: Device Identity (left) + Pre-Boot Checks (right)
+        split = QtWidgets.QHBoxLayout()
+        split.setSpacing(16)
+
+        sys_card = QtWidgets.QFrame()
+        sys_card.setObjectName("Card")
+        sys_lay = QtWidgets.QVBoxLayout(sys_card)
+        sys_lay.setContentsMargins(20, 18, 20, 18)
+        sys_lay.setSpacing(12)
+        sys_title = QtWidgets.QLabel("Board & System Identity")
+        sys_title.setObjectName("SectionHeading")
+        sys_lay.addWidget(sys_title)
+        self.sys_info_layout = QtWidgets.QGridLayout()
+        self.sys_info_layout.setVerticalSpacing(8)
+        self.sys_info_layout.setHorizontalSpacing(16)
+        sys_lay.addLayout(self.sys_info_layout)
+        sys_lay.addStretch()
+        split.addWidget(sys_card, stretch=1)
+
+        checks_card = QtWidgets.QFrame()
+        checks_card.setObjectName("Card")
+        checks_lay = QtWidgets.QVBoxLayout(checks_card)
+        checks_lay.setContentsMargins(20, 18, 20, 18)
+        checks_lay.setSpacing(10)
+        checks_title = QtWidgets.QLabel("Pre-Boot Health Checks")
+        checks_title.setObjectName("SectionHeading")
+        checks_lay.addWidget(checks_title)
+
+        self._overview_checks_layout = QtWidgets.QVBoxLayout()
+        self._overview_checks_layout.setSpacing(8)
+        waiting = QtWidgets.QLabel("No pre-boot check summary recorded.")
+        waiting.setObjectName("MutedLabel")
+        self._overview_checks_layout.addWidget(waiting)
+        checks_lay.addLayout(self._overview_checks_layout)
+        checks_lay.addStretch()
+        split.addWidget(checks_card, stretch=1)
+
+        layout.addLayout(split)
+        layout.addStretch()
+        scroll.setWidget(content)
+        return scroll
+
+    # -----------------------------------------------------------------------
+    # Page 1: Diagnostics (10 Filterable Cards)
+    # -----------------------------------------------------------------------
+
+    def _create_diagnostics_page(self) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(24, 18, 24, 20)
+        layout.setSpacing(14)
+
+        # Category filter bar
+        filter_row = QtWidgets.QHBoxLayout()
+        filter_row.setSpacing(8)
+        self._filter_buttons: Dict[str, QtWidgets.QPushButton] = {}
+        for cat in ("All", "Core", "I/O & Display", "System"):
+            btn = QtWidgets.QPushButton(cat)
+            btn.setObjectName("FilterPill")
+            btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            btn.clicked.connect(lambda _checked=False, c=cat: self._set_category_filter(c))
+            filter_row.addWidget(btn)
+            self._filter_buttons[cat] = btn
+        filter_row.addStretch()
+
+        clear_inline = QtWidgets.QPushButton("Reset Cards")
+        clear_inline.setObjectName("SecondaryButton")
+        clear_inline.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        clear_inline.clicked.connect(self.clear_results)
+        filter_row.addWidget(clear_inline)
+        layout.addLayout(filter_row)
+
+        # Scrollable grid
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        self._diag_grid_widget = QtWidgets.QWidget()
+        self._diag_grid = QtWidgets.QGridLayout(self._diag_grid_widget)
+        self._diag_grid.setContentsMargins(0, 0, 0, 0)
+        self._diag_grid.setSpacing(14)
+
+        for test_id, title, subtitle, icon_key, category in _DIAGNOSTIC_SPECS:
+            card = DiagnosticCard(title, subtitle, icon_key, category=category)
+            card.test_btn.clicked.connect(lambda _checked=False, tid=test_id: self.run_test(tid))
+            self.test_cards[test_id] = card
+
+        scroll.setWidget(self._diag_grid_widget)
         layout.addWidget(scroll, stretch=1)
 
-        # Interactive Hardware Tools bar
-        tools_row = QtWidgets.QHBoxLayout()
-        tools_row.setSpacing(10)
-        tools_lbl = QtWidgets.QLabel("Interactive Tools:")
-        tools_lbl.setObjectName("sys_info_label")
-        tools_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #333333;")
-        tools_row.addWidget(tools_lbl)
-
-        tool_btn_style = """
-            QPushButton {
-                background-color: #ffffff;
-                color: #0078d4;
-                border: 1px solid #0078d4;
-                border-radius: 6px;
-                padding: 7px 14px;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            QPushButton:hover {
-                background-color: #e8f3fc;
-            }
-        """
-
-        hdmi_tool_btn = QtWidgets.QPushButton("HDMI Pattern & Audio Test")
-        hdmi_tool_btn.setStyleSheet(tool_btn_style)
-        hdmi_tool_btn.clicked.connect(self.open_hdmi_pattern)
-        tools_row.addWidget(hdmi_tool_btn)
-
-        gpio_tool_btn = QtWidgets.QPushButton("GPIO 40-Pin Viewer")
-        gpio_tool_btn.setStyleSheet(tool_btn_style)
-        gpio_tool_btn.clicked.connect(self.open_gpio_viewer)
-        tools_row.addWidget(gpio_tool_btn)
-
-        wifi_tool_btn = QtWidgets.QPushButton("Wi-Fi Setup")
-        wifi_tool_btn.setStyleSheet(tool_btn_style)
-        wifi_tool_btn.clicked.connect(self.open_wifi_dialog)
-        tools_row.addWidget(wifi_tool_btn)
-
-        tools_row.addStretch()
-        layout.addLayout(tools_row)
-        
+        self._set_category_filter("All")
         return page
 
-    def _create_results_page(self):
-        """Create Results page showing test results"""
-        page = LogoBackgroundPage()
-        layout = QtWidgets.QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(20)
-        
-        # Results header
-        header = QtWidgets.QHBoxLayout()
-        results_label = QtWidgets.QLabel("Test Results")
-        results_label.setStyleSheet("""
-            font-size: 20px;
-            font-weight: 600;
-            color: #1a1a1a;
-        """)
-        header.addWidget(results_label)
-        header.addStretch()
-        
-        clear_btn = QtWidgets.QPushButton("Clear Results")
-        clear_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ef4444;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 13px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #dc2626;
-            }
-        """)
-        clear_btn.clicked.connect(self.clear_results)
-        header.addWidget(clear_btn)
-        
-        layout.addLayout(header)
-        
-        # Results display area
+    def _set_category_filter(self, category: str):
+        self._active_category = category
+        for cat, btn in self._filter_buttons.items():
+            btn.setProperty("active", cat == category)
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+        # Clear grid without deleting card widgets
+        while self._diag_grid.count():
+            self._diag_grid.takeAt(0)
+
+        cols = 4
+        idx = 0
+        for test_id, *_rest in _DIAGNOSTIC_SPECS:
+            card = self.test_cards[test_id]
+            visible = category == "All" or card.category == category
+            card.setVisible(visible)
+            if visible:
+                self._diag_grid.addWidget(card, idx // cols, idx % cols)
+                idx += 1
+
+        # Pad trailing columns so cards keep uniform width
+        for c in range(cols):
+            self._diag_grid.setColumnStretch(c, 1)
+        self._diag_grid.setRowStretch((idx // cols) + 1, 1)
+
+    # -----------------------------------------------------------------------
+    # Page 2: Interactive Hardware Tools
+    # -----------------------------------------------------------------------
+
+    def _create_tools_page(self) -> QtWidgets.QWidget:
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
-        
+        content = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(24, 22, 24, 24)
+        layout.setSpacing(18)
+
+        grid = QtWidgets.QGridLayout()
+        grid.setSpacing(16)
+
+        self._tool_cards: List[ToolActionCard] = []
+
+        hdmi_card = ToolActionCard(
+            "HDMI Pattern & Audio Test",
+            "Launch a fullscreen visual test cycling through SMPTE color bars, solid Red/Green/Blue/White/Black dead-pixel screens, checkerboard geometry, and an optional audio tone.",
+            "Launch Display Test",
+            "hdmi",
+        )
+        hdmi_card.action_btn.clicked.connect(self.open_hdmi_pattern)
+        grid.addWidget(hdmi_card, 0, 0)
+        self._tool_cards.append(hdmi_card)
+
+        gpio_card = ToolActionCard(
+            "GPIO 40-Pin Header Viewer",
+            "Inspect the Raspberry Pi 40-pin header pinout with color-coded power/ground rails and live read-only HIGH/LOW pin polling (safe — never drives pins).",
+            "Open Pinout Viewer",
+            "gpio",
+        )
+        gpio_card.action_btn.clicked.connect(self.open_gpio_viewer)
+        grid.addWidget(gpio_card, 0, 1)
+        self._tool_cards.append(gpio_card)
+
+        wifi_card = ToolActionCard(
+            "Wi-Fi Network Setup",
+            "Scan nearby wireless networks and connect directly from kiosk mode using NetworkManager so network tests and phone QR sharing work without Ethernet.",
+            "Configure Wi-Fi",
+            "wifi",
+        )
+        wifi_card.action_btn.clicked.connect(self.open_wifi_dialog)
+        grid.addWidget(wifi_card, 0, 2)
+        self._tool_cards.append(wifi_card)
+
+        for c in range(3):
+            grid.setColumnStretch(c, 1)
+
+        layout.addLayout(grid)
+        layout.addStretch()
+        scroll.setWidget(content)
+        return scroll
+
+    # -----------------------------------------------------------------------
+    # Page 3: Results & Export
+    # -----------------------------------------------------------------------
+
+    def _create_results_page(self) -> QtWidgets.QWidget:
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(24, 18, 24, 20)
+        layout.setSpacing(14)
+
+        # KPI + Export action bar
+        top_card = QtWidgets.QFrame()
+        top_card.setObjectName("Card")
+        top_lay = QtWidgets.QHBoxLayout(top_card)
+        top_lay.setContentsMargins(18, 14, 18, 14)
+        top_lay.setSpacing(16)
+
+        self._kpi_labels: Dict[str, QtWidgets.QLabel] = {}
+        for key, label in (("passed", "Passed"), ("warn", "Warnings"), ("failed", "Failed"), ("total", "Completed")):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(0)
+            val = QtWidgets.QLabel("0")
+            val.setStyleSheet("font-size: 18px; font-weight: 800;")
+            lbl = QtWidgets.QLabel(label)
+            lbl.setObjectName("MutedLabel")
+            col.addWidget(val)
+            col.addWidget(lbl)
+            top_lay.addLayout(col)
+            self._kpi_labels[key] = val
+
+        top_lay.addStretch()
+
+        for text, slot, obj_name in (
+            ("Preview PDF", self.generate_and_preview_pdf, "PrimaryButton"),
+            ("Save to USB", self.export_usb, "SecondaryButton"),
+            ("Save to SD Boot", self.export_sd, "SecondaryButton"),
+            ("Share QR", self.export_qr, "SecondaryButton"),
+            ("Clear", self.clear_results, "DangerButton"),
+        ):
+            btn = QtWidgets.QPushButton(text)
+            btn.setObjectName(obj_name)
+            btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+            btn.clicked.connect(slot)
+            top_lay.addWidget(btn)
+
+        layout.addWidget(top_card)
+
+        # Scrollable results list
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
         self.results_widget = QtWidgets.QWidget()
         self.results_layout = QtWidgets.QVBoxLayout(self.results_widget)
+        self.results_layout.setContentsMargins(0, 0, 0, 0)
         self.results_layout.setSpacing(12)
-        self.results_layout.addStretch()
-        
         scroll.setWidget(self.results_widget)
-        layout.addWidget(scroll)
-        
+        layout.addWidget(scroll, stretch=1)
+
+        self._update_results_display()
         return page
 
-    def _create_settings_page(self):
-        """Create Settings page with theme, font size, and network options"""
-        page = LogoBackgroundPage()
-        layout = QtWidgets.QVBoxLayout(page)
-        layout.setContentsMargins(24, 24, 24, 24)
-        layout.setSpacing(24)
-        
-        # Settings title
-        title = QtWidgets.QLabel("Settings")
-        title.setObjectName("settings_title")
-        title.setStyleSheet("""
-            font-size: 24px;
-            font-weight: 600;
-            color: #1a1a1a;
-            padding-bottom: 8px;
-        """)
-        layout.addWidget(title)
-        
-        # Network Settings Card
-        network_card = self._create_setting_card("Network", "Network configuration and status")
-        network_layout = QtWidgets.QVBoxLayout()
-        network_layout.setSpacing(12)
-        
-        # Network status
-        status_label = QtWidgets.QLabel("Network Status:")
-        status_label.setObjectName("setting_label")
-        network_layout.addWidget(status_label)
-        
-        # Refresh network info + Wi-Fi Setup buttons
-        net_btn_row = QtWidgets.QHBoxLayout()
-        net_btn_style = """
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 13px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-        """
-        refresh_btn = QtWidgets.QPushButton("Refresh Network Info")
-        refresh_btn.setStyleSheet(net_btn_style)
-        refresh_btn.clicked.connect(self._refresh_network_info)
-        net_btn_row.addWidget(refresh_btn)
+    # -----------------------------------------------------------------------
+    # Page 4: Settings
+    # -----------------------------------------------------------------------
+
+    def _create_settings_page(self) -> QtWidgets.QWidget:
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(content)
+        layout.setContentsMargins(24, 22, 24, 24)
+        layout.setSpacing(16)
+
+        # Appearance card
+        appear = QtWidgets.QFrame()
+        appear.setObjectName("Card")
+        ap_lay = QtWidgets.QHBoxLayout(appear)
+        ap_lay.setContentsMargins(20, 16, 20, 16)
+        ap_txt = QtWidgets.QVBoxLayout()
+        ap_title = QtWidgets.QLabel("Appearance")
+        ap_title.setObjectName("SectionHeading")
+        ap_desc = QtWidgets.QLabel("Switch between Dark hardware-lab mode and Light mode.")
+        ap_desc.setObjectName("MutedLabel")
+        ap_txt.addWidget(ap_title)
+        ap_txt.addWidget(ap_desc)
+        ap_lay.addLayout(ap_txt)
+        ap_lay.addStretch()
+
+        self._dark_btn = QtWidgets.QPushButton("Dark Mode")
+        self._dark_btn.setObjectName("FilterPill")
+        self._dark_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self._dark_btn.clicked.connect(lambda: self._apply_theme("dark"))
+        ap_lay.addWidget(self._dark_btn)
+
+        self._light_btn = QtWidgets.QPushButton("Light Mode")
+        self._light_btn.setObjectName("FilterPill")
+        self._light_btn.setCursor(QtGui.QCursor(QtCore.Qt.PointingHandCursor))
+        self._light_btn.clicked.connect(lambda: self._apply_theme("light"))
+        ap_lay.addWidget(self._light_btn)
+        layout.addWidget(appear)
+
+        # Network card
+        net_card = QtWidgets.QFrame()
+        net_card.setObjectName("Card")
+        net_lay = QtWidgets.QVBoxLayout(net_card)
+        net_lay.setContentsMargins(20, 18, 20, 18)
+        net_lay.setSpacing(10)
+
+        net_hdr = QtWidgets.QHBoxLayout()
+        net_t = QtWidgets.QLabel("Network & Wi-Fi")
+        net_t.setObjectName("SectionHeading")
+        net_hdr.addWidget(net_t)
+        net_hdr.addStretch()
+
+        ref_btn = QtWidgets.QPushButton("Refresh")
+        ref_btn.setObjectName("SecondaryButton")
+        ref_btn.clicked.connect(self._refresh_network_info)
+        net_hdr.addWidget(ref_btn)
 
         wifi_btn = QtWidgets.QPushButton("Connect to Wi-Fi…")
-        wifi_btn.setStyleSheet(net_btn_style)
+        wifi_btn.setObjectName("PrimaryButton")
         wifi_btn.clicked.connect(self.open_wifi_dialog)
-        net_btn_row.addWidget(wifi_btn)
-        net_btn_row.addStretch()
-        network_layout.addLayout(net_btn_row)
-        
-        # Network info display
+        net_hdr.addWidget(wifi_btn)
+        net_lay.addLayout(net_hdr)
+
         self.network_info_text = QtWidgets.QTextEdit()
         self.network_info_text.setReadOnly(True)
-        self.network_info_text.setMaximumHeight(200)
-        self.network_info_text.setObjectName("network_info")
-        self.network_info_text.setStyleSheet("""
-            QTextEdit {
-                background-color: transparent;
-                border: 1px solid #d8d8d8;
-                border-radius: 6px;
-                padding: 8px;
-                font-family: 'Courier New', monospace;
-                font-size: 12px;
-            }
-        """)
-        network_layout.addWidget(self.network_info_text)
-        
-        # Load initial network info
-        self._refresh_network_info()
-        
-        network_card.layout().addLayout(network_layout)
-        layout.addWidget(network_card)
+        self.network_info_text.setMinimumHeight(170)
+        self.network_info_text.setMaximumHeight(220)
+        self.network_info_text.setStyleSheet("font-family: monospace; font-size: 12px;")
+        net_lay.addWidget(self.network_info_text)
+        layout.addWidget(net_card)
 
-        # System & Power Card (Version, report dir, kiosk power controls)
-        sys_card = self._create_setting_card(
-            "System & Power",
-            f"Apple Pi Diagnostics {APP_VERSION}  ·  Reports: {REPORT_DIR}",
-        )
-        power_row = QtWidgets.QHBoxLayout()
-        power_row.setSpacing(10)
+        # System & Power card
+        sys_card = QtWidgets.QFrame()
+        sys_card.setObjectName("Card")
+        sys_lay = QtWidgets.QVBoxLayout(sys_card)
+        sys_lay.setContentsMargins(20, 18, 20, 18)
+        sys_lay.setSpacing(10)
+        st = QtWidgets.QLabel("System, Reports & Power")
+        st.setObjectName("SectionHeading")
+        sd = QtWidgets.QLabel(f"Apple Pi Diagnostics {APP_VERSION}  ·  Reports folder: {REPORT_DIR}")
+        sd.setObjectName("MutedLabel")
+        sys_lay.addWidget(st)
+        sys_lay.addWidget(sd)
 
-        reboot_btn = QtWidgets.QPushButton("Reboot Device")
-        reboot_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #f3f4f6; color: #111827; border: 1px solid #d1d5db;
-                border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500;
-            }
-            QPushButton:hover { background-color: #e5e7eb; }
-        """)
-        reboot_btn.clicked.connect(lambda: self._confirm_system_power("reboot"))
-        power_row.addWidget(reboot_btn)
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(10)
+        open_dir_btn = QtWidgets.QPushButton("Open Reports Folder")
+        open_dir_btn.setObjectName("SecondaryButton")
+        open_dir_btn.clicked.connect(lambda: self._open_file_location(REPORT_DIR / "report.pdf"))
+        btn_row.addWidget(open_dir_btn)
 
-        shutdown_btn = QtWidgets.QPushButton("Shut Down Device")
-        shutdown_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #ef4444; color: white; border: none;
-                border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500;
-            }
-            QPushButton:hover { background-color: #dc2626; }
-        """)
-        shutdown_btn.clicked.connect(lambda: self._confirm_system_power("poweroff"))
-        power_row.addWidget(shutdown_btn)
-        power_row.addStretch()
-        sys_card.layout().addLayout(power_row)
+        rb = QtWidgets.QPushButton("Reboot Device")
+        rb.setObjectName("SecondaryButton")
+        rb.clicked.connect(lambda: self._confirm_system_power("reboot"))
+        btn_row.addWidget(rb)
+
+        sd_btn = QtWidgets.QPushButton("Shut Down Device")
+        sd_btn.setObjectName("DangerButton")
+        sd_btn.clicked.connect(lambda: self._confirm_system_power("poweroff"))
+        btn_row.addWidget(sd_btn)
+        btn_row.addStretch()
+        sys_lay.addLayout(btn_row)
         layout.addWidget(sys_card)
-        
+
         layout.addStretch()
-        
-        return page
-    
-    def _create_setting_card(self, title, description):
-        """Create a settings card container"""
-        card = QtWidgets.QWidget()
-        card.setObjectName("setting_card")
-        card.setStyleSheet("""
-            QWidget#setting_card {
-                background-color: #ffffff;
-                border-radius: 12px;
-                border: 1px solid #e0e0e0;
-                padding: 20px;
-            }
-        """)
-        
-        card_layout = QtWidgets.QVBoxLayout(card)
-        card_layout.setContentsMargins(20, 16, 20, 16)
-        card_layout.setSpacing(8)
-        
-        card_title = QtWidgets.QLabel(title)
-        card_title.setObjectName("section_card_title")
-        card_title.setStyleSheet("""
-            font-size: 18px;
-            font-weight: 600;
-            color: #1a1a1a;
-        """)
-        card_layout.addWidget(card_title)
+        scroll.setWidget(content)
+        return scroll
 
-        card_desc = QtWidgets.QLabel(description)
-        card_desc.setObjectName("card_desc")
-        card_desc.setStyleSheet("""
-            font-size: 13px;
-            color: #666666;
-            padding-bottom: 8px;
-        """)
-        card_layout.addWidget(card_desc)
-        
-        return card
-    
-    def _refresh_network_info(self):
-        """Refresh and display network information"""
-        try:
-            import psutil
-            import json
-            
-            # Get network interfaces
-            if_stats = psutil.net_if_stats()
-            if_addrs = psutil.net_if_addrs()
-            
-            info_lines = []
-            info_lines.append("Network Interfaces:\n")
-            info_lines.append("-" * 50)
-            
-            for name, stats in if_stats.items():
-                if name == "lo":
-                    continue
-                up_status = "UP" if stats.isup else "DOWN"
-                info_lines.append(f"\n{name}: {up_status}")
-                
-                # Get addresses
-                addrs = if_addrs.get(name, [])
-                for addr in addrs:
-                    if hasattr(addr, 'address'):
-                        addr_family = "IPv4" if addr.family == socket.AF_INET else "IPv6" if addr.family == socket.AF_INET6 else "MAC"
-                        info_lines.append(f"  {addr_family}: {addr.address}")
-            
-            # Get default gateway and local IP
-            try:
-                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.connect((GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT))
-                local_ip = s.getsockname()[0]
-                s.close()
-                info_lines.append(f"\n\nLocal IP: {local_ip}")
-            except Exception:
-                info_lines.append("\n\nLocal IP: Not available")
-            
-            # DNS test
-            try:
-                import time
-                t0 = time.time()
-                socket.gethostbyname(NETWORK_DNS_CHECK_HOST)
-                dns_time = (time.time() - t0) * 1000
-                info_lines.append(f"DNS Resolution: OK ({dns_time:.0f}ms)")
-            except Exception as e:
-                info_lines.append(f"DNS Resolution: Failed ({str(e)})")
-            
-            self.network_info_text.setPlainText("\n".join(info_lines))
-        except Exception as e:
-            self.network_info_text.setPlainText(f"Error loading network info: {e}")
+    # -----------------------------------------------------------------------
+    # Navigation & Theming
+    # -----------------------------------------------------------------------
 
-    def _create_system_info_card(self):
-        """Create system information card"""
-        card = QtWidgets.QWidget()
-        card.setObjectName("sys_info_card")
-        
-        layout = QtWidgets.QVBoxLayout(card)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
-        
-        title = QtWidgets.QLabel("System Information")
-        title.setObjectName("sys_info_title")
-        layout.addWidget(title)
-        
-        self.sys_info_layout = QtWidgets.QGridLayout()
-        self.sys_info_layout.setSpacing(12)
-        layout.addLayout(self.sys_info_layout)
-        
-        return card
+    def _switch_page(self, index: int):
+        self.pages.setCurrentIndex(index)
+        title, subtitle = _PAGE_META[index]
+        self._top_title.setText(title)
+        self._top_subtitle.setText(subtitle)
+        t = THEMES[self.theme_name]
+        for idx, (btn, icon_key) in enumerate(self._nav_buttons):
+            active = idx == index
+            btn.setProperty("active", active)
+            btn.setIcon(make_svg_icon(icon_key, 17, t["accent"] if active else t["text_secondary"]))
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+
+    def toggle_theme(self):
+        self._apply_theme("light" if self.theme_name == "dark" else "dark")
+
+    def _apply_theme(self, theme_name: str = "dark"):
+        self.theme_name = theme_name if theme_name in THEMES else "dark"
+        t = THEMES[self.theme_name]
+        self.setStyleSheet(build_stylesheet(self.theme_name))
+
+        # Update top-bar & sidebar icons
+        self.run_all_btn.setIcon(make_svg_icon("play", 14, "#ffffff"))
+        self.qr_btn.setIcon(make_svg_icon("qr", 15, t["text"]))
+        self._sidebar_reboot_btn.setIcon(make_svg_icon("reboot", 14, t["text"]))
+        self._sidebar_shutdown_btn.setIcon(make_svg_icon("shutdown", 14, t["danger"]))
+
+        if self.theme_name == "dark":
+            self._theme_btn.setText("  Light Mode")
+            self._theme_btn.setIcon(make_svg_icon("sun", 15, t["warning"]))
+        else:
+            self._theme_btn.setText("  Dark Mode")
+            self._theme_btn.setIcon(make_svg_icon("moon", 15, t["accent"]))
+
+        self._dark_btn.setProperty("active", self.theme_name == "dark")
+        self._light_btn.setProperty("active", self.theme_name == "light")
+        for b in (self._dark_btn, self._light_btn):
+            b.style().unpolish(b)
+            b.style().polish(b)
+
+        # Refresh nav icons
+        self._switch_page(self.pages.currentIndex())
+
+        # Refresh custom painted widgets
+        self.health_ring.set_theme(self.theme_name)
+        for tile in self._telemetry_tiles.values():
+            tile.set_theme(self.theme_name)
+        for card in self.test_cards.values():
+            card.set_theme(self.theme_name)
+        for card in self._tool_cards:
+            card.set_theme(self.theme_name)
+        self._update_results_display()
+        if self._startup_results:
+            self.show_startup_banner(self._startup_results)
+
+    # -----------------------------------------------------------------------
+    # System Info, Live Telemetry & Startup Checks
+    # -----------------------------------------------------------------------
 
     def _update_system_info(self):
-        """Update system information display"""
         try:
             hostname = socket.gethostname()
-            system = platform.system()
-            machine = platform.machine()
-            processor = platform.processor()
-            
-            # Try to get Pi model
-            pi_model = "Unknown"
-            try:
-                if Path("/proc/device-tree/model").exists():
-                    pi_model = Path("/proc/device-tree/model").read_text(errors="ignore").strip('\x00\n')
-            except Exception:
-                pass
-            
-            info_items = [
-                ("Version", APP_VERSION),
-                ("Hostname", hostname),
-                ("System", f"{system} {machine}"),
-                ("Processor", processor or "Unknown"),
+            pi_model = "Generic Linux Host"
+            model_path = Path("/proc/device-tree/model")
+            if model_path.is_file():
+                pi_model = model_path.read_text(errors="ignore").strip("\x00\n") or pi_model
+
+            os_pretty = f"{platform.system()} {platform.release()}"
+            os_rel = Path("/etc/os-release")
+            if os_rel.is_file():
+                for ln in os_rel.read_text(encoding="utf-8", errors="ignore").splitlines():
+                    if ln.startswith("PRETTY_NAME="):
+                        os_pretty = ln.split("=", 1)[1].strip().strip('"')
+                        break
+
+            items = [
+                ("App Version", APP_VERSION),
                 ("Device", pi_model),
+                ("Hostname", hostname),
+                ("Operating System", os_pretty),
+                ("Architecture", platform.machine()),
+                ("Python", platform.python_version()),
             ]
-            
-            # Clear existing
+
             while self.sys_info_layout.count():
                 item = self.sys_info_layout.takeAt(0)
                 if item.widget():
                     item.widget().deleteLater()
-            
-            # Add info items
-            self.sys_info_labels.clear()
-            row = 0
-            for label, value in info_items:
-                label_widget = QtWidgets.QLabel(f"{label}:")
-                label_widget.setObjectName("sys_info_label")
-                value_widget = QtWidgets.QLabel(value)
-                value_widget.setObjectName("sys_info_value")
-                self.sys_info_labels.extend([label_widget, value_widget])
-                
-                self.sys_info_layout.addWidget(label_widget, row, 0)
-                self.sys_info_layout.addWidget(value_widget, row, 1)
-                row += 1
+
+            for r, (k, v) in enumerate(items):
+                k_lbl = QtWidgets.QLabel(k)
+                k_lbl.setObjectName("KeyLabel")
+                v_lbl = QtWidgets.QLabel(v)
+                v_lbl.setObjectName("ValueLabel")
+                v_lbl.setWordWrap(True)
+                self.sys_info_layout.addWidget(k_lbl, r, 0)
+                self.sys_info_layout.addWidget(v_lbl, r, 1)
+            self.sys_info_layout.setColumnStretch(1, 1)
         except Exception as e:
             self.statusBar().showMessage(f"Error loading system info: {e}")
 
     def _update_live_telemetry(self):
-        """Refresh live CPU, RAM, temperature, and throttle telemetry on Overview."""
-        if not hasattr(self, "_telemetry_labels"):
+        if not hasattr(self, "_telemetry_tiles"):
             return
         try:
             import psutil
             cpu_pct = psutil.cpu_percent(interval=None)
-            mem = psutil.virtual_memory()
-            self._telemetry_labels["cpu"].setText(f"{cpu_pct:.0f}%")
-            self._telemetry_labels["ram"].setText(
-                f"{mem.used / (1024**3):.1f} / {mem.total / (1024**3):.1f} GB ({mem.percent:.0f}%)"
+            cpu_tone = "danger" if cpu_pct >= 85 else "warning" if cpu_pct >= 65 else "accent"
+            cores = psutil.cpu_count(logical=True) or 1
+            self._telemetry_tiles["cpu"].update_metric(
+                f"{cpu_pct:.0f}%", f"{cores} logical cores", int(cpu_pct), cpu_tone
             )
 
-            temp_str = "N/A"
+            mem = psutil.virtual_memory()
+            mem_tone = "danger" if mem.percent >= 88 else "warning" if mem.percent >= 72 else "success"
+            self._telemetry_tiles["ram"].update_metric(
+                f"{mem.percent:.0f}%",
+                f"{mem.used / (1024**3):.1f} / {mem.total / (1024**3):.1f} GB used",
+                int(mem.percent),
+                mem_tone,
+            )
+
             tz = Path("/sys/class/thermal/thermal_zone0/temp")
             if tz.is_file():
                 try:
                     t_c = int(tz.read_text(encoding="utf-8").strip()) / 1000.0
-                    temp_str = f"{t_c:.1f} °C"
+                    t_tone = "danger" if t_c >= 80 else "warning" if t_c >= 70 else "success"
+                    self._telemetry_tiles["temp"].update_metric(
+                        f"{t_c:.1f} °C",
+                        "Hot — check cooling" if t_c >= 75 else "Normal thermal range",
+                        int(min(100, t_c)),
+                        t_tone,
+                    )
                 except Exception:
-                    pass
-            self._telemetry_labels["temp"].setText(temp_str)
+                    self._telemetry_tiles["temp"].update_metric("N/A", "Sensor unreadable", 0, "accent")
+            else:
+                self._telemetry_tiles["temp"].update_metric("N/A", "No thermal zone", 0, "accent")
 
-            throttle_str = "N/A"
             t_path = Path("/sys/devices/platform/soc/soc:firmware/get_throttled")
             if t_path.is_file():
                 try:
                     raw = int(t_path.read_text(encoding="utf-8").strip(), 16)
                     if raw == 0:
-                        throttle_str = "OK (0x0)"
+                        self._telemetry_tiles["power"].update_metric("Healthy", "No throttling (0x0)", 100, "success")
                     elif raw & 0xF:
-                        throttle_str = f"THROTTLED ({hex(raw)})"
+                        self._telemetry_tiles["power"].update_metric(
+                            "Throttled", f"Active issue ({hex(raw)})", 100, "danger"
+                        )
                     else:
-                        throttle_str = f"History ({hex(raw)})"
+                        self._telemetry_tiles["power"].update_metric(
+                            "Warning", f"Past event ({hex(raw)})", 70, "warning"
+                        )
                 except Exception:
-                    pass
-            self._telemetry_labels["power"].setText(throttle_str)
+                    self._telemetry_tiles["power"].update_metric("N/A", "Firmware flag unreadable", 0, "accent")
+            else:
+                self._telemetry_tiles["power"].update_metric("Non-Pi", "Firmware telemetry N/A", 0, "accent")
         except Exception:
             pass
 
+    def show_startup_banner(self, results: List[Dict[str, Any]]):
+        """Render pre-boot check results inside the Dashboard Pre-Boot card."""
+        if not results or not hasattr(self, "_overview_checks_layout"):
+            return
+        self._startup_results = results
+        t = THEMES[self.theme_name]
+
+        while self._overview_checks_layout.count():
+            item = self._overview_checks_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        passed = sum(1 for r in results if r.get("passed"))
+        total = len(results)
+        all_ok = passed == total
+
+        pill = QtWidgets.QLabel(
+            f"{'✓' if all_ok else '⚠'}  {passed} of {total} pre-boot checks passed"
+        )
+        pill_fg = t["success"] if all_ok else t["warning"]
+        pill_bg = t["success_soft"] if all_ok else t["warning_soft"]
+        pill.setStyleSheet(
+            f"font-size: 12px; font-weight: 700; color: {pill_fg}; "
+            f"background-color: {pill_bg}; border-radius: 8px; padding: 6px 12px;"
+        )
+        self._overview_checks_layout.addWidget(pill)
+
+        for r in results:
+            ok = bool(r.get("passed"))
+            row = QtWidgets.QWidget()
+            r_lay = QtWidgets.QHBoxLayout(row)
+            r_lay.setContentsMargins(4, 2, 4, 2)
+            r_lay.setSpacing(8)
+            ic = QtWidgets.QLabel("✓" if ok else "⚠")
+            ic.setStyleSheet(f"color: {t['success'] if ok else t['warning']}; font-weight: 700;")
+            ic.setFixedWidth(16)
+            nm = QtWidgets.QLabel(r.get("name", ""))
+            nm.setStyleSheet("font-size: 12px; font-weight: 600;")
+            dt = QtWidgets.QLabel(r.get("detail", ""))
+            dt.setObjectName("MutedLabel")
+            dt.setWordWrap(True)
+            r_lay.addWidget(ic)
+            r_lay.addWidget(nm)
+            r_lay.addWidget(dt, stretch=1)
+            self._overview_checks_layout.addWidget(row)
+
+    # -----------------------------------------------------------------------
+    # Diagnostics Execution
+    # -----------------------------------------------------------------------
+
+    def run_test(self, test_id: str):
+        """Run a single diagnostic module off the Qt event loop."""
+        card = self.test_cards.get(test_id)
+        if not card or test_id in self._running_tests:
+            return
+
+        self._running_tests.add(test_id)
+        card.test_btn.setEnabled(False)
+        card.set_status("RUNNING", "Running diagnostic…")
+        self._update_health_summary()
+        self.statusBar().showMessage(f"Running {_TEST_LABELS.get(test_id, test_id)} test…")
+
+        def _worker():
+            try:
+                runners = {
+                    "cpu": lambda: run_cpu_quick_test(duration=5, workers=None),
+                    "ram": lambda: run_ram_quick_test(total_mb=64, chunk_mb=16, passes=1),
+                    "sd": run_storage_quick_test,
+                    "power": run_power_quick_test,
+                    "network": run_network_quick_test,
+                    "usb": run_usb_quick_test,
+                    "hdmi": run_hdmi_quick_test,
+                    "gpio": run_gpio_quick_test,
+                    "bootloader": run_bootloader_quick_test,
+                    "peripherals": run_peripherals_quick_test,
+                }
+                fn = runners.get(test_id)
+                result = fn() if fn else {"status": "UNSUPPORTED", "note": "Unknown test"}
+            except Exception as e:
+                result = {"status": "FAIL", "error": str(e), "note": str(e)}
+
+            result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self.sig_test_finished.emit(test_id, result)
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    @QtCore.pyqtSlot(str, dict)
+    def _on_test_finished(self, test_id: str, result: Dict[str, Any]):
+        self._running_tests.discard(test_id)
+        with self.results_lock:
+            self.test_results[test_id] = result
+
+        card = self.test_cards.get(test_id)
+        if card:
+            status = result.get("status", "UNKNOWN")
+            details = self._short_card_detail(result)
+            card.set_status(status, details)
+            card.test_btn.setEnabled(True)
+
+        self._update_health_summary()
+        self._update_results_display()
+        self.statusBar().showMessage(
+            f"{_TEST_LABELS.get(test_id, test_id)} completed ({result.get('status', '?')})",
+            4000,
+        )
+
+    def _short_card_detail(self, result: Dict[str, Any]) -> str:
+        if result.get("note"):
+            return str(result["note"])
+        if "avg_cpu_percent" in result:
+            temp = result.get("max_temperature")
+            t_str = f" · {temp:.0f}°C" if temp is not None else ""
+            return f"Avg load {result['avg_cpu_percent']:.1f}%{t_str}"
+        if "tested_mb" in result:
+            tp = result.get("throughput_mb_s")
+            return f"{result['tested_mb']:.0f} MB verified" + (f" · {tp:.0f} MB/s" if tp else "")
+        if "total_devices" in result:
+            return f"{result.get('tested_devices', 0)}/{result.get('total_devices', 0)} devices tested"
+        if "local_ip" in result:
+            return f"IP: {result.get('local_ip') or 'Offline'}"
+        if "count" in result:
+            return f"{result['count']} detected"
+        return result.get("error", "")
+
+    def run_all_tests(self):
+        """Stagger-launch all 10 diagnostics without blocking the Qt UI thread."""
+        self._switch_page(1)
+        self._suite_progress.setValue(0)
+        self._suite_progress.setVisible(True)
+        self.statusBar().showMessage("Running full hardware diagnostic suite…")
+        for idx, (test_id, *_rest) in enumerate(_DIAGNOSTIC_SPECS):
+            QtCore.QTimer.singleShot(idx * 150, lambda tid=test_id: self.run_test(tid))
+
+    def _update_health_summary(self):
+        with self.results_lock:
+            snap = dict(self.test_results)
+
+        total = len(_DIAGNOSTIC_SPECS)
+        passed = sum(1 for r in snap.values() if r.get("status", "").upper() in ("OK", "PASS"))
+        failed = sum(1 for r in snap.values() if r.get("status", "").upper() in ("FAIL", "ERROR"))
+        warnings = sum(1 for r in snap.values() if r.get("status", "").upper() in ("WARNING", "UNSUPPORTED"))
+        completed = len(snap)
+
+        self.health_ring.set_counts(passed, warnings, failed, total)
+
+        if self._running_tests:
+            self._suite_progress.setVisible(True)
+            self._suite_progress.setValue(completed)
+            self._hero_heading.setText(f"Running Diagnostics ({completed}/{total})…")
+            self._hero_detail.setText(
+                f"Active: {', '.join(_TEST_LABELS.get(x, x) for x in sorted(self._running_tests))}"
+            )
+        else:
+            self._suite_progress.setVisible(False)
+            if completed == 0:
+                self._hero_heading.setText("System Ready for Diagnostics")
+                self._hero_detail.setText(
+                    "Run the full 10-module hardware verification suite or pick individual checks in Diagnostics."
+                )
+            elif failed > 0:
+                self._hero_heading.setText(f"{failed} Hardware Issue{'s' if failed != 1 else ''} Detected")
+                self._hero_detail.setText(
+                    f"{passed} passed, {warnings} warnings/unsupported, {failed} failed across {completed} completed tests."
+                )
+            elif warnings > 0:
+                self._hero_heading.setText(f"Completed with {warnings} Note{'s' if warnings != 1 else ''}")
+                self._hero_detail.setText(
+                    f"{passed} passed and {warnings} warning/unsupported items. Open Results & Export for details."
+                )
+            else:
+                self._hero_heading.setText("All Executed Checks Healthy")
+                self._hero_detail.setText(
+                    f"{passed} of {completed} completed hardware checks passed with zero issues."
+                )
+
+        if hasattr(self, "_kpi_labels"):
+            t = THEMES[self.theme_name]
+            self._kpi_labels["passed"].setText(str(passed))
+            self._kpi_labels["passed"].setStyleSheet(f"font-size: 18px; font-weight: 800; color: {t['success']};")
+            self._kpi_labels["warn"].setText(str(warnings))
+            self._kpi_labels["warn"].setStyleSheet(f"font-size: 18px; font-weight: 800; color: {t['warning']};")
+            self._kpi_labels["failed"].setText(str(failed))
+            self._kpi_labels["failed"].setStyleSheet(f"font-size: 18px; font-weight: 800; color: {t['danger']};")
+            self._kpi_labels["total"].setText(f"{completed}/{total}")
+
+    def clear_results(self):
+        with self.results_lock:
+            self.test_results.clear()
+        for card in self.test_cards.values():
+            card.set_status("PENDING", "")
+        self._update_health_summary()
+        self._update_results_display()
+        self.statusBar().showMessage("Results cleared", 3000)
+
+    # -----------------------------------------------------------------------
+    # Results Rendering
+    # -----------------------------------------------------------------------
+
+    def _summarize_result(self, test_id: str, result: Dict[str, Any]) -> List[str]:
+        from diagnostics.report_builder import _summarize_test
+        return _summarize_test(test_id, result)
+
+    def _update_results_display(self):
+        if not hasattr(self, "results_layout"):
+            return
+        while self.results_layout.count():
+            item = self.results_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        with self.results_lock:
+            results_copy = deepcopy(self.test_results)
+
+        if not results_copy:
+            empty = QtWidgets.QFrame()
+            empty.setObjectName("Card")
+            e_lay = QtWidgets.QVBoxLayout(empty)
+            e_lay.setContentsMargins(32, 48, 32, 48)
+            e_lbl = QtWidgets.QLabel("No test results yet")
+            e_lbl.setAlignment(QtCore.Qt.AlignCenter)
+            e_lbl.setStyleSheet("font-size: 16px; font-weight: 700;")
+            e_sub = QtWidgets.QLabel("Run individual modules or click 'Run All Tests' to generate results and PDF/QR reports.")
+            e_sub.setAlignment(QtCore.Qt.AlignCenter)
+            e_sub.setObjectName("MutedLabel")
+            e_lay.addWidget(e_lbl)
+            e_lay.addWidget(e_sub)
+            self.results_layout.addWidget(empty)
+        else:
+            t = THEMES[self.theme_name]
+            for test_id, result in results_copy.items():
+                card = QtWidgets.QFrame()
+                card.setObjectName("Card")
+                c_lay = QtWidgets.QVBoxLayout(card)
+                c_lay.setContentsMargins(18, 14, 18, 14)
+                c_lay.setSpacing(8)
+
+                hdr = QtWidgets.QHBoxLayout()
+                title = QtWidgets.QLabel(_TEST_LABELS.get(test_id, test_id.upper()))
+                title.setStyleSheet("font-size: 15px; font-weight: 700;")
+                hdr.addWidget(title)
+                hdr.addStretch()
+
+                status = result.get("status", "UNKNOWN").upper()
+                if status in ("OK", "PASS"):
+                    fg, bg, badge_txt = t["success"], t["success_soft"], "✓ Passed"
+                elif status in ("FAIL", "ERROR"):
+                    fg, bg, badge_txt = t["danger"], t["danger_soft"], "✗ Failed"
+                elif status == "WARNING":
+                    fg, bg, badge_txt = t["warning"], t["warning_soft"], "⚠ Warning"
+                elif status == "UNSUPPORTED":
+                    fg, bg, badge_txt = t["warning"], t["warning_soft"], "— Unsupported"
+                else:
+                    fg, bg, badge_txt = t["text_secondary"], t["neutral_soft"], "○ Unknown"
+
+                pill = QtWidgets.QLabel(badge_txt)
+                pill.setStyleSheet(
+                    f"font-size: 11px; font-weight: 700; color: {fg}; "
+                    f"background-color: {bg}; border-radius: 10px; padding: 3px 10px;"
+                )
+                hdr.addWidget(pill)
+                c_lay.addLayout(hdr)
+
+                body = QtWidgets.QLabel("\n".join(self._summarize_result(test_id, result)))
+                body.setWordWrap(True)
+                body.setObjectName("ValueLabel")
+                c_lay.addWidget(body)
+
+                ts = QtWidgets.QLabel(f"Tested: {result.get('timestamp', '')}")
+                ts.setObjectName("MutedLabel")
+                c_lay.addWidget(ts)
+                self.results_layout.addWidget(card)
+
+        self.results_layout.addStretch()
+
+    # -----------------------------------------------------------------------
+    # Reports & Exports
+    # -----------------------------------------------------------------------
+
+    def _build_report_payload(self) -> Dict[str, Any]:
+        with self.results_lock:
+            results_copy = deepcopy(self.test_results)
+        summary = {}
+        for test_id, result in results_copy.items():
+            summary[test_id] = {
+                "status": result.get("status", "UNKNOWN"),
+                "message": result.get("note", result.get("error", "")),
+                "metrics": {
+                    k: v for k, v in result.items() if k not in ("status", "note", "error", "timestamp")
+                },
+            }
+        return {
+            "title": "Apple Pi Diagnostics Report",
+            "summary": summary,
+            "details": results_copy,
+        }
+
+    def generate_and_preview_pdf(self):
+        if not self.test_results:
+            self.statusBar().showMessage("No test results to report. Run tests first.", 3000)
+            return
+        self.statusBar().showMessage("Generating PDF report…")
+        try:
+            paths = build_report(self._build_report_payload(), REPORT_DIR, formats=("pdf", "html", "json"))
+            self.latest_report_dir = REPORT_DIR
+            pdf_path = paths.get("pdf")
+            if pdf_path:
+                self._show_pdf_preview(pdf_path)
+            else:
+                self.statusBar().showMessage("Failed to generate PDF", 3000)
+        except Exception as e:
+            self.statusBar().showMessage(f"Error generating report: {e}", 4000)
+
+    def _show_pdf_preview(self, pdf_path: Path):
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(f"Report Preview — Apple Pi Diagnostics {APP_VERSION}")
+        dialog.setMinimumSize(820, 620)
+        layout = QtWidgets.QVBoxLayout(dialog)
+        layout.setSpacing(12)
+
+        preview = QtWidgets.QTextBrowser()
+        preview.setReadOnly(True)
+        html_path = pdf_path.with_suffix(".html")
+        if html_path.is_file():
+            preview.setHtml(html_path.read_text(encoding="utf-8"))
+        else:
+            preview.setPlainText(f"PDF generated at: {pdf_path}")
+        layout.addWidget(preview)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        for label, handler, style_id in (
+            ("Save to USB Drive", lambda: self._save_pdf_to_usb(pdf_path, dialog), "PrimaryButton"),
+            ("Save to SD Boot", self.export_sd, "SecondaryButton"),
+            ("Share via QR", self.export_qr, "SecondaryButton"),
+            ("Open Folder", lambda: self._open_file_location(pdf_path), "SecondaryButton"),
+        ):
+            b = QtWidgets.QPushButton(label)
+            b.setObjectName(style_id)
+            b.clicked.connect(handler)
+            btn_row.addWidget(b)
+        btn_row.addStretch()
+        close_btn = QtWidgets.QPushButton("Close")
+        close_btn.setObjectName("SecondaryButton")
+        close_btn.clicked.connect(dialog.accept)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+        dialog.exec_()
+
+    def _save_pdf_to_usb(self, pdf_path: Path, dialog: QtWidgets.QDialog):
+        dialog.setEnabled(False)
+        temp_dir = None
+        try:
+            temp_dir = Path(tempfile.mkdtemp())
+            shutil.copy2(pdf_path, temp_dir / pdf_path.name)
+            result = save_report_to_usb(temp_dir)
+            if result:
+                QtWidgets.QMessageBox.information(dialog, "Saved to USB", f"Report saved to:\n{result}")
+                dialog.accept()
+            else:
+                QtWidgets.QMessageBox.warning(
+                    dialog, "No USB Drive", "No writable USB drive detected. Insert a USB drive and try again."
+                )
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(dialog, "Export Error", f"Failed to save to USB: {e}")
+        finally:
+            if temp_dir and temp_dir.exists():
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            dialog.setEnabled(True)
+
+    def generate_report(self):
+        if not self.test_results:
+            self.statusBar().showMessage("No test results to report. Run tests first.", 3000)
+            return
+        try:
+            paths = build_report(self._build_report_payload(), REPORT_DIR, formats=("pdf", "html", "json", "qr"))
+            self.latest_report_dir = REPORT_DIR
+            self.statusBar().showMessage(f"Report generated ({len(paths)} files)", 4000)
+        except Exception as e:
+            self.statusBar().showMessage(f"Error: {e}", 4000)
+
+    def export_usb(self):
+        if not self.latest_report_dir and self.test_results:
+            self.generate_report()
+        res = save_report_to_usb(self.latest_report_dir or REPORT_DIR)
+        if res:
+            QtWidgets.QMessageBox.information(self, "Saved to USB", f"Reports saved to:\n{res}")
+            self.statusBar().showMessage(f"Saved to USB: {res}", 5000)
+        else:
+            QtWidgets.QMessageBox.warning(
+                self, "No USB Drive", "No mounted or automountable USB flash drive detected."
+            )
+
+    def export_sd(self):
+        if not self.latest_report_dir and self.test_results:
+            self.generate_report()
+        res = save_report_to_sdboot(self.latest_report_dir or REPORT_DIR)
+        if res:
+            QtWidgets.QMessageBox.information(self, "Saved to SD Boot", f"Reports saved to:\n{res}")
+            self.statusBar().showMessage(f"Saved to SD boot: {res}", 5000)
+        else:
+            QtWidgets.QMessageBox.warning(
+                self, "SD Boot Unavailable", "Could not write to /boot/firmware or /boot."
+            )
+
+    def export_qr(self):
+        if not self.latest_report_dir and self.test_results:
+            self.generate_report()
+        try:
+            if self.qr_manager:
+                self.qr_manager.stop()
+            self.qr_manager = QRExportManager(self.latest_report_dir or REPORT_DIR)
+            url = self.qr_manager.start()
+            qr_path = REPORT_DIR / "qrs" / "report_qr.png"
+            generate_qr_image(url, qr_path)
+            self.statusBar().showMessage(f"Serving reports at {url}", 5000)
+            QrPreviewDialog(url, qr_path, self).exec_()
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, "QR Export Error", str(e))
+
+    # -----------------------------------------------------------------------
+    # Network Info, Interactive Tools & Device Power
+    # -----------------------------------------------------------------------
+
+    def _refresh_network_info(self):
+        if not hasattr(self, "network_info_text"):
+            return
+        try:
+            import psutil
+            if_stats = psutil.net_if_stats()
+            if_addrs = psutil.net_if_addrs()
+            lines = ["Interfaces:"]
+            for name, st in if_stats.items():
+                if name == "lo":
+                    continue
+                lines.append(f"  {name}: {'UP' if st.isup else 'DOWN'}")
+                for addr in if_addrs.get(name, []):
+                    if getattr(addr, "address", None):
+                        fam = "IPv4" if addr.family == socket.AF_INET else "IPv6" if addr.family == socket.AF_INET6 else "MAC"
+                        lines.append(f"    {fam}: {addr.address}")
+
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.connect((GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT))
+                local_ip = s.getsockname()[0]
+                s.close()
+                lines.append(f"\nDefault Route IP: {local_ip}")
+            except Exception:
+                lines.append("\nDefault Route IP: Offline / LAN only")
+
+            try:
+                t0 = time.time()
+                socket.gethostbyname(NETWORK_DNS_CHECK_HOST)
+                lines.append(f"DNS ({NETWORK_DNS_CHECK_HOST}): OK ({(time.time() - t0) * 1000:.0f} ms)")
+            except Exception as e:
+                lines.append(f"DNS ({NETWORK_DNS_CHECK_HOST}): Failed ({e})")
+
+            self.network_info_text.setPlainText("\n".join(lines))
+        except Exception as e:
+            self.network_info_text.setPlainText(f"Error loading network info: {e}")
+
     def open_hdmi_pattern(self):
-        """Launch fullscreen HDMI color bar / dead-pixel / audio test dialog."""
-        dlg = HdmiPatternDialog(self)
-        dlg.exec_()
+        HdmiPatternDialog(self).exec_()
 
     def open_gpio_viewer(self):
-        """Open read-only 40-pin Raspberry Pi GPIO header viewer."""
-        dlg = GpioPinoutDialog(self)
-        dlg.exec_()
+        GpioPinoutDialog(self).exec_()
 
     def open_wifi_dialog(self):
-        """Open Wi-Fi scan & connect dialog and refresh network status after."""
-        dlg = WifiConnectDialog(self)
-        dlg.exec_()
+        WifiConnectDialog(self).exec_()
         self._refresh_network_info()
 
-    def _confirm_system_power(self, action):
-        """Prompt for confirmation before rebooting or shutting down the Pi."""
-        import subprocess
+    def _open_file_location(self, file_path: Path):
+        try:
+            if platform.system() == "Linux":
+                subprocess.Popen(["xdg-open", str(file_path.parent)])
+            elif platform.system() == "Darwin":
+                subprocess.Popen(["open", str(file_path.parent)])
+            elif platform.system() == "Windows":
+                subprocess.Popen(["explorer", "/select,", str(file_path)])
+        except Exception:
+            pass
+
+    def _confirm_system_power(self, action: str):
         label = "Reboot" if action == "reboot" else "Shut Down"
         reply = QtWidgets.QMessageBox.question(
             self,
@@ -1237,961 +1370,6 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception as e:
             QtWidgets.QMessageBox.warning(self, f"{label} Failed", str(e))
 
-    def show_startup_banner(self, results):
-        """Populate the Overview Boot Checks panel with pre-boot check results."""
-        if not results or not hasattr(self, "_overview_checks_panel_layout"):
-            return
-
-        # Clear placeholder content
-        while self._overview_checks_panel_layout.count():
-            item = self._overview_checks_panel_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-        passed = sum(1 for r in results if r.get("passed"))
-        total = len(results)
-        all_ok = passed == total
-
-        # Summary row
-        if all_ok:
-            summary_col, summary_icon = "#166534", "✓"
-            summary_bg, summary_border = "#dcfce7", "#10b981"
-        else:
-            summary_col, summary_icon = "#713f12", "⚠"
-            summary_bg, summary_border = "#fef9c3", "#f59e0b"
-
-        summary_row = QtWidgets.QWidget()
-        summary_row.setStyleSheet(f"""
-            QWidget {{
-                background-color: {summary_bg};
-                border-left: 4px solid {summary_border};
-                border-radius: 4px;
-            }}
-        """)
-        summary_row_layout = QtWidgets.QHBoxLayout(summary_row)
-        summary_row_layout.setContentsMargins(12, 8, 12, 8)
-        summary_lbl = QtWidgets.QLabel(f"{summary_icon}  Pre-boot checks: {passed} / {total} passed")
-        summary_lbl.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {summary_col}; background: transparent;")
-        summary_row_layout.addWidget(summary_lbl)
-        summary_row_layout.addStretch()
-        self._overview_checks_panel_layout.addWidget(summary_row)
-
-        # Individual check rows
-        for r in results:
-            chk_icon = "✓" if r.get("passed") else "⚠"
-            chk_col = "#166534" if r.get("passed") else "#713f12"
-            row_widget = QtWidgets.QWidget()
-            row_widget.setStyleSheet("background: transparent;")
-            row_layout = QtWidgets.QHBoxLayout(row_widget)
-            row_layout.setContentsMargins(16, 2, 0, 2)
-            row_layout.setSpacing(8)
-            icon_lbl = QtWidgets.QLabel(chk_icon)
-            icon_lbl.setStyleSheet(f"font-size: 14px; color: {chk_col}; background: transparent;")
-            icon_lbl.setFixedWidth(18)
-            name_lbl = QtWidgets.QLabel(f"<b>{r['name']}</b>")
-            name_lbl.setStyleSheet(f"font-size: 13px; color: #1a1a1a; background: transparent;")
-            detail_lbl = QtWidgets.QLabel(r.get("detail", ""))
-            detail_lbl.setStyleSheet("font-size: 13px; color: #555555; background: transparent;")
-            row_layout.addWidget(icon_lbl)
-            row_layout.addWidget(name_lbl)
-            row_layout.addWidget(detail_lbl)
-            row_layout.addStretch()
-            self._overview_checks_panel_layout.addWidget(row_widget)
-
-    @QtCore.pyqtSlot()
-    def _update_results_display(self):
-        """Update the results page with current test results"""
-        # Clear existing results
-        while self.results_layout.count():
-            item = self.results_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-        
-        # Thread-safe copy of results
-        with self.results_lock:
-            results_copy = deepcopy(self.test_results)
-        
-        if not results_copy:
-            no_results = QtWidgets.QLabel("No test results yet. Run tests from the Testing page.")
-            no_results.setStyleSheet("""
-                font-size: 14px;
-                color: #888888;
-                padding: 40px;
-            """)
-            no_results.setAlignment(QtCore.Qt.AlignCenter)
-            self.results_layout.addWidget(no_results)
-        else:
-            for test_id, result in results_copy.items():
-                result_card = self._create_result_card(test_id, result)
-                self.results_layout.addWidget(result_card)
-        
-        self.results_layout.addStretch()
-
-    def _summarize_result(self, test_id, result):
-        """Return a list of plain-English summary lines for a test result."""
-        status = result.get("status", "UNKNOWN")
-        lines = []
-
-        if test_id == "cpu":
-            avg = result.get("avg_cpu_percent")
-            if avg is not None:
-                lines.append(f"CPU averaged {avg:.1f}% load during the test.")
-            workers = result.get("workers")
-            if workers:
-                lines.append(f"Used {workers} worker thread{'s' if workers != 1 else ''}.")
-            temp = result.get("max_temperature")
-            if temp is not None:
-                lines.append(f"Peak temperature: {temp:.0f} °C.")
-            per_cpu = result.get("per_cpu_percent", [])
-            if per_cpu:
-                lines.append(f"Individual cores: {', '.join(f'{v:.0f}%' for v in per_cpu)}.")
-
-        elif test_id == "ram":
-            tested = result.get("tested_mb")
-            if tested is not None:
-                lines.append(f"Tested {tested:.0f} MB of RAM.")
-            errors = result.get("errors", [])
-            if errors:
-                lines.append(f"Errors found: {'; '.join(str(e) for e in errors[:3])}.")
-            else:
-                lines.append("No memory errors detected.")
-            tp = result.get("throughput_mb_s")
-            if tp is not None:
-                lines.append(f"Throughput: {tp:.0f} MB/s.")
-
-        elif test_id == "sd":
-            total = result.get("total_devices", 0)
-            tested_d = result.get("tested_devices", 0)
-            lines.append(f"Found {total} storage device{'s' if total != 1 else ''}; tested {tested_d}.")
-            for dev in result.get("devices", []):
-                name = dev.get("device", "?")
-                size = dev.get("size_gb")
-                fs = dev.get("fstype", "unknown fs")
-                dev_status = dev.get("status", "?")
-                w = dev.get("write_mb_s")
-                r = dev.get("read_mb_s")
-                note = dev.get("note", "")
-                size_str = f"{size:.0f} GB, " if size else ""
-                speed_str = ""
-                if w is not None and r is not None:
-                    speed_str = f" — {w:.0f} MB/s write, {r:.0f} MB/s read"
-                elif note:
-                    speed_str = f" — {note}"
-                lines.append(f"{name} ({size_str}{fs}): {dev_status}{speed_str}.")
-                sd_meta = dev.get("sd_metadata")
-                if sd_meta:
-                    lines.append("  • SD CID: " + ", ".join(f"{k}={v}" for k, v in sd_meta.items()))
-                if dev.get("smart_health"):
-                    lines.append(f"  • SMART: {dev['smart_health']}")
-            mmc_errors = result.get("mmc_dmesg_errors") or []
-            if mmc_errors:
-                lines.append(f"Kernel MMC warnings ({len(mmc_errors)}): {mmc_errors[-1]}")
-
-        elif test_id == "power":
-            if result.get("temperature_c") is not None:
-                lines.append(f"SoC temperature: {result['temperature_c']:.1f} °C.")
-            if result.get("arm_clock_mhz") is not None:
-                lines.append(f"ARM clock: {result['arm_clock_mhz']:.0f} MHz.")
-            volts = result.get("voltages") or {}
-            if volts:
-                lines.append("Rails: " + ", ".join(f"{k}={v:.3f}V" for k, v in volts.items()) + ".")
-            thr = result.get("throttled")
-            if isinstance(thr, dict):
-                lines.append(f"Throttle flags: {thr.get('raw', '0x0')}.")
-            if result.get("note"):
-                lines.append(result["note"])
-
-        elif test_id == "bootloader":
-            if result.get("model"):
-                lines.append(f"Board: {result['model']}.")
-            if result.get("revision"):
-                lines.append(f"Revision: {result['revision']}.")
-            if result.get("serial"):
-                lines.append(f"Serial: {result['serial']}.")
-            if result.get("bootloader_version"):
-                lines.append(f"Bootloader: {result['bootloader_version']}.")
-            if result.get("eeprom_status"):
-                lines.append(f"EEPROM: {result['eeprom_status']}.")
-            if result.get("note"):
-                lines.append(result["note"])
-
-        elif test_id == "peripherals":
-            for label_p, key_p in (
-                ("I2C buses", "i2c_buses"),
-                ("SPI devices", "spi_devices"),
-                ("Bluetooth", "bluetooth_adapters"),
-                ("Audio", "audio_devices"),
-                ("Cameras", "cameras"),
-            ):
-                vals = result.get(key_p) or []
-                if vals:
-                    lines.append(f"{label_p}: {', '.join(vals[:4])}.")
-            if result.get("note") and not lines:
-                lines.append(result["note"])
-
-        elif test_id == "network":
-            local_ip = result.get("local_ip")
-            if local_ip:
-                lines.append(f"Local IP address: {local_ip}.")
-            ifaces = result.get("interfaces", [])
-            up_ifaces = [i["name"] for i in ifaces if i.get("up")]
-            if up_ifaces:
-                lines.append(f"Active interfaces: {', '.join(up_ifaces)}.")
-            dns = result.get("dns", {})
-            if dns.get("ok"):
-                lat = dns.get("latency_s")
-                lat_str = f" ({lat*1000:.0f} ms)" if lat is not None else ""
-                lines.append(f"DNS resolution OK{lat_str}.")
-            elif dns:
-                lines.append(f"DNS resolution failed: {dns.get('note', '')}.")
-            pings = result.get("ping", [])
-            ok_pings = [p["host"] for p in pings if p.get("ok")]
-            fail_pings = [p["host"] for p in pings if not p.get("ok")]
-            if ok_pings:
-                lines.append(f"Ping OK to: {', '.join(ok_pings)}.")
-            if fail_pings:
-                lines.append(f"Ping failed to: {', '.join(fail_pings)}.")
-
-        elif test_id == "usb":
-            count = result.get("count")
-            if count is not None:
-                lines.append(f"Found {count} USB device{'s' if count != 1 else ''}.")
-            devices = result.get("devices", [])
-            for d in devices[:5]:
-                lines.append(f"  • {d}")
-            if len(devices) > 5:
-                lines.append(f"  … and {len(devices) - 5} more.")
-            note = result.get("note", "")
-            if note and status != "OK":
-                lines.append(note)
-            w = result.get("write_mb_s")
-            r = result.get("read_mb_s")
-            if w is not None and r is not None:
-                lines.append(f"Speed test: {w:.0f} MB/s write, {r:.0f} MB/s read.")
-
-        elif test_id == "hdmi":
-            count = result.get("count")
-            if count is not None:
-                lines.append(f"{count} display{'s' if count != 1 else ''} connected.")
-            for d in result.get("displays", []):
-                name = d.get("name", "Unknown")
-                res = d.get("resolution", "")
-                lines.append(f"  • {name}{': ' + res if res else ''}.")
-            note = result.get("note", "")
-            if note:
-                lines.append(note)
-
-        elif test_id == "gpio":
-            note = result.get("note", "")
-            driver = result.get("driver", "")
-            if driver:
-                lines.append(f"GPIO driver: {driver}.")
-            if note:
-                lines.append(note)
-            gpio_results = result.get("results", [])
-            if gpio_results:
-                passed = sum(1 for r in gpio_results if r)
-                lines.append(f"Loopback: {passed}/{len(gpio_results)} pulses verified.")
-
-        else:
-            note = result.get("note", result.get("error", ""))
-            if note:
-                lines.append(note)
-
-        if not lines:
-            lines.append("No details available.")
-
-        return lines
-
-    def _create_result_card(self, test_id, result):
-        """Create a card displaying a test result"""
-        card_bg = "#ffffff"
-        border_color = "#d8d8d8"
-        text_color = "#111111"
-        summary_color = "#333333"
-
-        card = QtWidgets.QWidget()
-        card.setObjectName("result_card")
-        card.setStyleSheet(f"""
-            QWidget#result_card {{
-                background-color: {card_bg};
-                border-radius: 12px;
-                border: 1px solid {border_color};
-            }}
-        """)
-
-        layout = QtWidgets.QVBoxLayout(card)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(10)
-
-        # Header: test name + pass/fail badge
-        header = QtWidgets.QHBoxLayout()
-        test_labels = {
-            "cpu": "CPU", "ram": "RAM", "sd": "Storage", "power": "Power & Thermal",
-            "network": "Network", "usb": "USB", "hdmi": "HDMI", "gpio": "GPIO",
-            "bootloader": "Bootloader & Board", "peripherals": "Peripherals",
-        }
-        test_name = QtWidgets.QLabel(test_labels.get(test_id, test_id.upper()))
-        test_name.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {text_color};")
-        header.addWidget(test_name)
-        header.addStretch()
-
-        status = result.get("status", "UNKNOWN")
-        if status in ("OK", "PASS"):
-            status_color, status_text = "#10b981", "✓ Passed"
-        elif status in ("FAIL", "ERROR"):
-            status_color, status_text = "#ef4444", "✗ Failed"
-        elif status == "WARNING":
-            status_color, status_text = "#f59e0b", "⚠ Warning"
-        elif status == "UNSUPPORTED":
-            status_color, status_text = "#f59e0b", "— Not supported"
-        else:
-            status_color, status_text = "#6b7280", "○ Unknown"
-
-        status_label = QtWidgets.QLabel(status_text)
-        status_label.setStyleSheet(f"font-size: 13px; font-weight: 600; color: {status_color};")
-        header.addWidget(status_label)
-        layout.addLayout(header)
-
-        # Divider
-        divider = QtWidgets.QFrame()
-        divider.setFrameShape(QtWidgets.QFrame.HLine)
-        divider.setStyleSheet(f"color: {border_color};")
-        layout.addWidget(divider)
-
-        # Plain-English summary
-        summary_lines = self._summarize_result(test_id, result)
-        summary_text = "\n".join(summary_lines)
-        summary_label = QtWidgets.QLabel(summary_text)
-        summary_label.setWordWrap(True)
-        summary_label.setStyleSheet(f"font-size: 13px; color: {summary_color}; padding: 2px 0;")
-        layout.addWidget(summary_label)
-
-        # Timestamp
-        timestamp = result.get("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        time_label = QtWidgets.QLabel(f"Tested: {timestamp}")
-        time_label.setStyleSheet("font-size: 11px; color: #888888;")
-        layout.addWidget(time_label)
-
-        return card
-
-    def run_test(self, test_id):
-        """Run a specific diagnostic test"""
-        card = self.test_cards.get(test_id)
-        if not card:
-            return
-            
-        card.test_btn.setEnabled(False)
-        card.set_status("RUNNING", "Testing...")
-        self.statusBar().showMessage(f"Running {test_id.upper()} test...")
-        
-        def run_in_thread():
-            try:
-                if test_id == "cpu":
-                    result = run_cpu_quick_test(duration=5, workers=None)
-                elif test_id == "ram":
-                    result = run_ram_quick_test(total_mb=64, chunk_mb=16, passes=1)
-                elif test_id == "sd":
-                    result = run_storage_quick_test()
-                elif test_id == "network":
-                    result = run_network_quick_test()
-                elif test_id == "usb":
-                    result = run_usb_quick_test()
-                elif test_id == "hdmi":
-                    result = run_hdmi_quick_test()
-                elif test_id == "gpio":
-                    result = run_gpio_quick_test()
-                elif test_id == "power":
-                    result = run_power_quick_test()
-                elif test_id == "bootloader":
-                    result = run_bootloader_quick_test()
-                elif test_id == "peripherals":
-                    result = run_peripherals_quick_test()
-                else:
-                    result = {"status": "UNSUPPORTED", "note": "Unknown test"}
-                
-                # Add timestamp
-                result["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                
-                # Store result (thread-safe)
-                with self.results_lock:
-                    self.test_results[test_id] = result
-                
-                # Update UI
-                status = result.get("status", "UNKNOWN")
-                details = result.get("note", "")
-                if not details:
-                    if "avg_cpu_percent" in result:
-                        details = f"CPU: {result['avg_cpu_percent']:.1f}%"
-                    elif "tested_mb" in result:
-                        details = f"Tested: {result['tested_mb']:.0f} MB"
-                    elif "total_devices" in result:
-                        # Storage test result
-                        total = result.get("total_devices", 0)
-                        tested = result.get("tested_devices", 0)
-                        details = f"{tested}/{total} devices tested"
-                    elif "count" in result:
-                        details = f"Found: {result['count']} items"
-                    elif "local_ip" in result:
-                        details = f"IP: {result.get('local_ip', 'N/A')}"
-                
-                QtCore.QMetaObject.invokeMethod(
-                    card, "set_status", QtCore.Qt.QueuedConnection,
-                    QtCore.Q_ARG(str, status),
-                    QtCore.Q_ARG(str, details)
-                )
-                QtCore.QMetaObject.invokeMethod(
-                    card.test_btn, "setEnabled", QtCore.Qt.QueuedConnection,
-                    QtCore.Q_ARG(bool, True)
-                )
-                QtCore.QMetaObject.invokeMethod(
-                    self, "_update_results_display", QtCore.Qt.QueuedConnection
-                )
-                QtCore.QMetaObject.invokeMethod(
-                    self.statusBar(), "showMessage", QtCore.Qt.QueuedConnection,
-                    QtCore.Q_ARG(str, f"{test_id.upper()} test completed")
-                )
-            except Exception as e:
-                error_result = {"status": "FAIL", "error": str(e), "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-                with self.results_lock:
-                    self.test_results[test_id] = error_result
-                QtCore.QMetaObject.invokeMethod(
-                    card, "set_status", QtCore.Qt.QueuedConnection,
-                    QtCore.Q_ARG(str, "FAIL"),
-                    QtCore.Q_ARG(str, str(e))
-                )
-                QtCore.QMetaObject.invokeMethod(
-                    card.test_btn, "setEnabled", QtCore.Qt.QueuedConnection,
-                    QtCore.Q_ARG(bool, True)
-                )
-                QtCore.QMetaObject.invokeMethod(
-                    self, "_update_results_display", QtCore.Qt.QueuedConnection
-                )
-        
-        thread = threading.Thread(target=run_in_thread, daemon=True)
-        thread.start()
-
-    def run_all_tests(self):
-        """Run all diagnostic tests"""
-        self.statusBar().showMessage("Running all tests...")
-        # Add small delay between starting tests to avoid overwhelming the system
-        import time
-        for i, test_id in enumerate(self.test_cards.keys()):
-            if i > 0:
-                time.sleep(0.2)  # Small delay between test starts
-            self.run_test(test_id)
-
-    def clear_results(self):
-        """Clear all test results"""
-        with self.results_lock:
-            self.test_results.clear()
-        self._update_results_display()
-        # Reset all cards to pending
-        for card in self.test_cards.values():
-            card.set_status("PENDING", "")
-        self.statusBar().showMessage("Results cleared")
-
-    def generate_and_preview_pdf(self):
-        """Generate PDF and show preview dialog with USB save option"""
-        # Generate report first
-        if not self.test_results:
-            self.statusBar().showMessage("No test results to report. Run tests first.", 3000)
-            return
-        
-        self.statusBar().showMessage("Generating PDF...")
-        try:
-            # Build report data from test results
-            with self.results_lock:
-                results_copy = deepcopy(self.test_results)
-            
-            summary = {}
-            details = {}
-            
-            for test_id, result in results_copy.items():
-                status = result.get("status", "UNKNOWN")
-                summary[test_id] = {
-                    "status": status,
-                    "message": result.get("note", result.get("error", "")),
-                    "metrics": {k: v for k, v in result.items() if k not in ("status", "note", "error", "timestamp")}
-                }
-                details[test_id] = result
-            
-            report_data = {
-                "title": "Apple Pi Diagnostics Report",
-                "summary": summary,
-                "details": details
-            }
-            
-            results = build_report(report_data, REPORT_DIR, formats=("pdf", "html"))
-            self.latest_report_dir = REPORT_DIR
-
-            if "pdf" in results and results["pdf"]:
-                pdf_path = results["pdf"]
-                self._show_pdf_preview(pdf_path)
-            else:
-                self.statusBar().showMessage("Failed to generate PDF", 3000)
-        except Exception as e:
-            self.statusBar().showMessage(f"Error: {e}", 3000)
-    
-    def _show_pdf_preview(self, pdf_path):
-        """Show PDF preview dialog with save to USB option"""
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle("PDF Preview - Apple Pi Diagnostics")
-        dialog.setMinimumSize(800, 600)
-        
-        layout = QtWidgets.QVBoxLayout(dialog)
-        
-        # PDF preview area (using QTextBrowser to show HTML version if available)
-        preview = QtWidgets.QTextBrowser()
-        preview.setReadOnly(True)
-        
-        # Try to show HTML version if available
-        html_path = pdf_path.with_suffix(".html")
-        if html_path.exists():
-            with open(html_path, 'r', encoding='utf-8') as f:
-                preview.setHtml(f.read())
-        else:
-            preview.setPlainText(f"PDF generated: {pdf_path}\n\nUse an external PDF viewer to preview.")
-        
-        layout.addWidget(preview)
-        
-        # Buttons
-        button_layout = QtWidgets.QHBoxLayout()
-        
-        save_usb_btn = QtWidgets.QPushButton("Save to USB Drive")
-        save_usb_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #106ebe;
-            }
-        """)
-        save_usb_btn.clicked.connect(lambda: self._save_pdf_to_usb(pdf_path, dialog))
-        button_layout.addWidget(save_usb_btn)
-
-        save_sd_btn = QtWidgets.QPushButton("Save to SD Boot")
-        save_sd_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #0078d4; color: white; border: none;
-                border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500;
-            }
-            QPushButton:hover { background-color: #106ebe; }
-        """)
-        save_sd_btn.clicked.connect(self.export_sd)
-        button_layout.addWidget(save_sd_btn)
-
-        share_qr_btn = QtWidgets.QPushButton("Share via QR")
-        share_qr_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #10b981; color: white; border: none;
-                border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500;
-            }
-            QPushButton:hover { background-color: #059669; }
-        """)
-        share_qr_btn.clicked.connect(self.export_qr)
-        button_layout.addWidget(share_qr_btn)
-        
-        button_layout.addStretch()
-        
-        open_btn = QtWidgets.QPushButton("Open File Location")
-        open_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #666666;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #777777;
-            }
-        """)
-        open_btn.clicked.connect(lambda: self._open_file_location(pdf_path))
-        button_layout.addWidget(open_btn)
-        
-        close_btn = QtWidgets.QPushButton("Close")
-        close_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #cccccc;
-                color: #333333;
-                border: none;
-                border-radius: 6px;
-                padding: 10px 20px;
-                font-size: 14px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background-color: #bbbbbb;
-            }
-        """)
-        close_btn.clicked.connect(dialog.accept)
-        button_layout.addWidget(close_btn)
-        
-        layout.addLayout(button_layout)
-        
-        dialog.exec()
-    
-    def _save_pdf_to_usb(self, pdf_path, dialog):
-        """Save PDF to USB drive"""
-        dialog.setEnabled(False)
-        try:
-            # Create a temporary report directory with just the PDF
-            import tempfile
-            import shutil
-            temp_dir = Path(tempfile.mkdtemp())
-            shutil.copy2(pdf_path, temp_dir / pdf_path.name)
-            
-            result = save_report_to_usb(temp_dir)
-            if result:
-                QtWidgets.QMessageBox.information(
-                    dialog, "Success", 
-                    f"PDF saved to USB drive:\n{result}"
-                )
-                dialog.accept()
-            else:
-                QtWidgets.QMessageBox.warning(
-                    dialog, "No USB Drive", 
-                    "No USB drive found. Please insert a USB drive and try again."
-                )
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(
-                dialog, "Error", 
-                f"Failed to save to USB: {e}"
-            )
-        finally:
-            dialog.setEnabled(True)
-    
-    def _open_file_location(self, file_path):
-        """Open file location in system file manager"""
-        import subprocess
-        import platform as plat
-        try:
-            if plat.system() == "Linux":
-                subprocess.Popen(["xdg-open", str(file_path.parent)])
-            elif plat.system() == "Darwin":
-                subprocess.Popen(["open", str(file_path.parent)])
-            elif plat.system() == "Windows":
-                subprocess.Popen(["explorer", "/select,", str(file_path)])
-        except Exception:
-            pass
-
-    def generate_report(self):
-        """Generate a comprehensive report from all test results"""
-        # Thread-safe copy of results
-        with self.results_lock:
-            if not self.test_results:
-                self.statusBar().showMessage("No test results to report. Run tests first.", 3000)
-                return
-            results_copy = deepcopy(self.test_results)
-            
-        self.statusBar().showMessage("Generating report...")
-        try:
-            # Build report data from test results
-            summary = {}
-            details = {}
-            
-            for test_id, result in results_copy.items():
-                status = result.get("status", "UNKNOWN")
-                summary[test_id] = {
-                    "status": status,
-                    "message": result.get("note", result.get("error", "")),
-                    "metrics": {k: v for k, v in result.items() if k not in ("status", "note", "error", "timestamp")}
-                }
-                details[test_id] = result
-            
-            report_data = {
-                "title": "Apple Pi Diagnostics Report",
-                "summary": summary,
-                "details": details
-            }
-            
-            results = build_report(report_data, REPORT_DIR, formats=("pdf", "html", "json", "qr"))
-            self.latest_report_dir = REPORT_DIR
-            self.statusBar().showMessage(f"Report generated: {len(results)} files", 5000)
-        except Exception as e:
-            self.statusBar().showMessage(f"Error: {e}", 3000)
-
-    def export_usb(self):
-        if not self.latest_report_dir:
-            self.generate_report()
-        self.statusBar().showMessage("Saving to USB drive...")
-        try:
-            result = save_report_to_usb(self.latest_report_dir or REPORT_DIR)
-            if result:
-                self.statusBar().showMessage(f"Saved to USB: {result}", 5000)
-            else:
-                self.statusBar().showMessage("No USB drive found", 3000)
-        except Exception as e:
-            self.statusBar().showMessage(f"Error: {e}", 3000)
-
-    def export_sd(self):
-        if not self.latest_report_dir:
-            self.generate_report()
-        self.statusBar().showMessage("Saving to SD boot partition...")
-        try:
-            result = save_report_to_sdboot(self.latest_report_dir or REPORT_DIR)
-            if result:
-                self.statusBar().showMessage(f"Saved to SD boot: {result}", 5000)
-            else:
-                self.statusBar().showMessage("SD boot partition not found", 3000)
-        except Exception as e:
-            self.statusBar().showMessage(f"Error: {e}", 3000)
-
-    def export_qr(self):
-        if not self.latest_report_dir:
-            self.generate_report()
-        self.statusBar().showMessage("Generating QR code...")
-        try:
-            if self.qr_manager:
-                self.qr_manager.stop()
-            self.qr_manager = QRExportManager(self.latest_report_dir or REPORT_DIR)
-            url = self.qr_manager.start()
-            qr_path = REPORT_DIR / "qrs" / "report_qr.png"
-            generate_qr_image(url, qr_path)
-            self.statusBar().showMessage(f"Serving reports at {url}", 5000)
-            dlg = QrPreviewDialog(url, qr_path, self)
-            dlg.exec_()
-        except Exception as e:
-            self.statusBar().showMessage(f"Error: {e}", 3000)
-
-    def _update_tab_style(self):
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #d8d8d8;
-                background-color: #ffffff;
-            }
-            QTabBar::tab {
-                background-color: #ffffff;
-                color: #555555;
-                padding: 14px 40px;
-                margin-right: 2px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                font-size: 15px;
-                font-weight: 500;
-                min-width: 120px;
-            }
-            QTabBar::tab:selected {
-                background-color: #0078d4;
-                color: white;
-            }
-            QTabBar::tab:hover {
-                background-color: #f0f6ff;
-            }
-        """)
-
-    def _apply_theme(self):
-        """Apply the light theme to all UI elements."""
-        bg_color = "#ffffff"
-        card_bg = "#ffffff"
-        text_color = "#111111"
-        text_secondary = "#444444"
-        text_tertiary = "#666666"
-        border_color = "#d8d8d8"
-        header_bg = "#ffffff"
-        
-        # Update main window and central widget
-        self.centralWidget().setStyleSheet(f"""
-            QWidget {{
-                background-color: {bg_color};
-                color: {text_color};
-            }}
-        """)
-        
-        # Update header
-        for widget in self.findChildren(QtWidgets.QWidget):
-            if widget.objectName() == "" and widget.parent() == self.centralWidget():
-                # Likely the header widget
-                if widget.height() == 60:  # Header height
-                    widget.setStyleSheet(f"""
-                        QWidget {{
-                            background-color: {header_bg};
-                            border-bottom: 1px solid {border_color};
-                        }}
-                        QLabel {{
-                            color: {text_color} !important;
-                        }}
-                    """)
-        
-        # Update tabs
-        self._update_tab_style()
-        
-        # Update system info card
-        if self.sys_info_card:
-            self.sys_info_card.setStyleSheet(f"""
-                QWidget#sys_info_card {{
-                    background-color: {card_bg};
-                    border-radius: 12px;
-                    border: 1px solid {border_color};
-                }}
-                QLabel#sys_info_title {{
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: {text_color} !important;
-                }}
-                QLabel#sys_info_label {{
-                    font-size: 13px;
-                    color: {text_secondary} !important;
-                    font-weight: 500;
-                }}
-                QLabel#sys_info_value {{
-                    font-size: 13px;
-                    color: {text_color} !important;
-                }}
-            """)
-        
-        # Update status cards — Testing page gets the white box, Overview gets flat text
-        for card in self.test_cards.values():
-            card.set_icon_color("#555555")
-            card.setStyleSheet(f"""
-                StatusCard {{
-                    background-color: {card_bg};
-                    border-radius: 12px;
-                    border: 1px solid {border_color};
-                }}
-                StatusCard:hover {{
-                    border: 2px solid #0078d4;
-                    background-color: #f0f6ff;
-                }}
-                QLabel#card_title {{
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: {text_color} !important;
-                }}
-                QLabel#card_details {{
-                    font-size: 11px;
-                    color: {text_tertiary} !important;
-                }}
-            """)
-            status_label = card.findChild(QtWidgets.QLabel, "card_status")
-            if status_label:
-                current_style = status_label.styleSheet() or ""
-                if "#666666" in current_style or "color: #666666" in current_style:
-                    status_label.setStyleSheet(f"""
-                        font-size: 12px;
-                        color: {text_secondary} !important;
-                        font-weight: 500;
-                    """)
-
-        
-        # Update all other labels
-        for label in self.findChildren(QtWidgets.QLabel):
-            current_style = label.styleSheet() or ""
-            current_text = label.text()
-            
-            # Skip status labels (they have their own colors)
-            if "✓" in current_text or "✗" in current_text or "—" in current_text or "⟳" in current_text:
-                continue
-            
-            # Update based on object name or text content
-            if label.objectName() in ("sys_info_title", "sys_info_label", "sys_info_value", "version_badge"):
-                continue  # Already handled
-            
-            if "font-size: 20px" in current_style or "font-weight: 600" in current_style:
-                # Section headers
-                label.setStyleSheet(f"""
-                    font-size: 20px;
-                    font-weight: 600;
-                    color: {text_color} !important;
-                    padding: 8px 0;
-                """)
-            elif label.objectName() == "info_label" or "No test results" in current_text:
-                label.setStyleSheet(f"""
-                    font-size: 14px;
-                    color: {text_secondary} !important;
-                    padding: 4px 0 8px 0;
-                """)
-            elif "font-size: 14px" in current_style and "color: #666666" in current_style:
-                # Secondary text
-                label.setStyleSheet(f"""
-                    font-size: 14px;
-                    color: {text_secondary} !important;
-                """)
-            elif "color:" not in current_style.lower() or "#1a1a1a" in current_style or "#666666" in current_style:
-                # Default text - update to theme color
-                if "#1a1a1a" in current_style:
-                    new_style = current_style.replace("#1a1a1a", text_color)
-                elif "#666666" in current_style:
-                    new_style = current_style.replace("#666666", text_secondary)
-                else:
-                    new_style = f"{current_style}; color: {text_color} !important;"
-                label.setStyleSheet(new_style)
-        
-        # Update scroll areas
-        for scroll in self.findChildren(QtWidgets.QScrollArea):
-            scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
-        
-        # Result cards are rebuilt by _update_results_display() called below
-        
-        # Update settings page elements
-        for widget in self.findChildren(QtWidgets.QWidget):
-            if widget.objectName() == "setting_card":
-                widget.setStyleSheet(f"""
-                    QWidget#setting_card {{
-                        background-color: {card_bg};
-                        border-radius: 12px;
-                        border: 1px solid {border_color};
-                        padding: 20px;
-                    }}
-                """)
-        
-        # Update settings labels
-        for label in self.findChildren(QtWidgets.QLabel):
-            if label.objectName() == "settings_title":
-                label.setStyleSheet(f"""
-                    font-size: 24px;
-                    font-weight: 600;
-                    color: {text_color} !important;
-                    padding-bottom: 8px;
-                """)
-            elif label.objectName() == "section_card_title":
-                label.setStyleSheet(f"""
-                    font-size: 18px;
-                    font-weight: 600;
-                    color: {text_color} !important;
-                """)
-            elif label.objectName() == "card_desc":
-                label.setStyleSheet(f"""
-                    font-size: 13px;
-                    color: {text_secondary} !important;
-                    padding-bottom: 8px;
-                """)
-            elif label.objectName() == "setting_label":
-                label.setStyleSheet(f"""
-                    font-size: 14px;
-                    font-weight: 500;
-                    color: {text_color} !important;
-                """)
-            elif label.objectName() == "setting_value":
-                label.setStyleSheet(f"""
-                    font-size: 13px;
-                    color: {text_secondary} !important;
-                """)
-        
-        # Update network info text
-        if hasattr(self, 'network_info_text'):
-            self.network_info_text.setStyleSheet(f"""
-                QTextEdit#network_info {{
-                    background-color: transparent;
-                    border: 1px solid {border_color};
-                    border-radius: 6px;
-                    padding: 8px;
-                    font-family: 'Courier New', monospace;
-                    font-size: 12px;
-                    color: {text_color};
-                }}
-            """)
-
-
     def closeEvent(self, event):
         if hasattr(self, "_telemetry_timer") and self._telemetry_timer:
             self._telemetry_timer.stop()
@@ -2202,21 +1380,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    
-    # Set application style
     app.setStyle("Fusion")
-    
-    palette = QtGui.QPalette()
-    palette.setColor(QtGui.QPalette.Window, QtGui.QColor(255, 255, 255))
-    palette.setColor(QtGui.QPalette.WindowText, QtGui.QColor(17, 17, 17))
-    palette.setColor(QtGui.QPalette.Base, QtGui.QColor(255, 255, 255))
-    palette.setColor(QtGui.QPalette.AlternateBase, QtGui.QColor(248, 249, 250))
-    palette.setColor(QtGui.QPalette.Text, QtGui.QColor(17, 17, 17))
-    palette.setColor(QtGui.QPalette.Button, QtGui.QColor(255, 255, 255))
-    palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor(17, 17, 17))
-    app.setPalette(palette)
-    
-    # Show splash screen and collect pre-boot check results
+
     startup_check_results = []
     try:
         from gui.splash import SplashScreen
@@ -2232,7 +1397,7 @@ def main():
         window.show()
     if startup_check_results:
         window.show_startup_banner(startup_check_results)
-    sys.exit(app.exec())
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":

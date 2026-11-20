@@ -190,6 +190,8 @@ from diagnostics.gpio.gpio_test import run_gpio_quick_test
 from diagnostics.power.power_test import run_power_quick_test
 from diagnostics.bootloader.bootloader_test import run_bootloader_quick_test
 from diagnostics.peripherals.peripherals_test import run_peripherals_quick_test
+from gui.theme import build_stylesheet
+from gui.widgets import DiagnosticCard, HealthRingWidget, TelemetryTile, ToolActionCard
 from gui.tools_dialogs import HdmiPatternDialog, GpioPinoutDialog, WifiConnectDialog, QrPreviewDialog
 print(f"All Python and diagnostic module imports OK (version={config.APP_VERSION}).")
 PYEOF
