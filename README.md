@@ -46,31 +46,28 @@ Full Linux Diagnostic Environment
 
 When the system can boot normally, APD loads a clean, modern GUI that supports:
 
-Full System Diagnostic Suite
+### Full System Diagnostic Suite (10 Modules)
+- **CPU** — multi-core load stress & temperature monitoring
+- **RAM** — deterministic pattern write/read integrity & throughput testing
+- **Storage** — MicroSD / USB / NVMe speed benchmarks, SD Card CID metadata, kernel MMC error scan, and SMART health
+- **Power & Thermal** — `vcgencmd get_throttled` flag decoding (active & historical under-voltage / throttling), rail voltages, SoC temperature, and ARM clock
+- **Network** — Ethernet/Wi-Fi interface status, ping, DNS latency, and built-in kiosk Wi-Fi setup (`nmcli`)
+- **USB** — device enumeration (`lsusb`) & optional mounted drive speed test
+- **HDMI** — display detection (`xrandr`, DRM sysfs, read-only `vcgencmd`) plus fullscreen color-bar / dead-pixel / audio pattern test
+- **GPIO** — library detection (`RPi.GPIO` / `gpiozero`), optional loopback test, and read-only 40-pin header viewer
+- **Bootloader & Board** — board model/serial/revision, EEPROM version/update status, and `/boot/firmware` health check
+- **Peripherals** — read-only probes for I2C, SPI, Bluetooth, Audio, and CSI/V4L cameras
 
-CPU stress & temperature testing
+### Kiosk Appliance Features
+- Live CPU, memory, temperature, and throttle telemetry on the Overview tab
+- Built-in **Reboot** / **Shut Down** controls, **Wi-Fi Setup**, and **USB flash drive auto-mounting** (`udisks2`)
+- Automatic release version stamping (`VERSION`) across the splash screen, header, reports, and download filenames (`apple-pi-diagnostics-<tag>.img.xz`)
 
-RAM integrity testing
-
-SD card read/write benchmarking
-
-USB, HDMI, and GPIO verification
-
-Network (Ethernet/Wi-Fi) diagnostics
-
-Power & voltage stability monitoring
-
-Individual Test Selection
-
-Run only what you need:
-
-CPU test only
-
-Network test only
-
-SD card test only
-
-etc.
+### Flashing to a Raspberry Pi 4 / 5
+1. Download the latest `apple-pi-diagnostics-<version>.img.xz` from [GitHub Releases](https://github.com/swindsor8/ApplePiDiagnostics/releases)
+2. Open **Raspberry Pi Imager** → **Choose OS** → **Use custom** → select the `.img.xz` file
+3. Select **No** when prompted to apply OS customisation settings
+4. Flash to an SD card, insert into your Pi 4 or Pi 5, and power on — it boots straight into the GUI.
 
 Report Export Options
 
@@ -162,21 +159,21 @@ One-click export functions
 
 📁 Project Structure Overview
 
-Organized into:
-
-bootloader_stage/
-
-failsafe_stage/
-
-linux_stage/
-
-desktop_app/
-
-pi_imager/
-
-build_tools/
-
-docs/
+```
+ApplePiDiagnostics/
+├── bootloader-tools/     # Stage 1: EEPROM recovery & SD boot validation scripts
+├── failsafe-env/         # Stage 2: BusyBox diagnostics & assets bundled in initramfs
+├── init                  # Stage 2: Failsafe initramfs entry script & recovery menu
+├── full-linux-gui/       # Stage 3: PyQt5 diagnostic GUI, modules, exports & tests
+├── deploy/               # Pi OS Bookworm kiosk image setup (X11, openbox, polkit)
+├── assets/               # Application logos & icons
+├── scripts/              # Build/maintenance helpers (PiShrink pin updater, icons)
+├── build-image.sh        # Builds flashable apple-pi-diagnostics-<ver>.img.xz
+├── build_failsafe.sh     # Builds ARM64 failsafe initramfs
+├── install.sh            # Local installation script on Debian/Ubuntu/Pi OS
+├── VERSION               # Stamped application version
+└── os_list.json          # Raspberry Pi Imager manifest
+```
 
 💡 Why Apple Pi Diagnostics?
 

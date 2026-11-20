@@ -22,15 +22,19 @@ ApplePiDiagnostics/
 │   ├── app/
 │   │   ├── main.py                  # Entry point; MainWindow + startup logic
 │   │   ├── gui/
-│   │   │   └── splash.py            # SplashScreen with live pre-boot checks
+│   │   │   ├── splash.py            # SplashScreen with live pre-boot checks + version
+│   │   │   └── tools_dialogs.py     # HDMI pattern, GPIO 40-pin, Wi-Fi, and QR dialogs
 │   │   ├── diagnostics/
 │   │   │   ├── cpu/cpu_test.py
 │   │   │   ├── ram/ram_test.py
 │   │   │   ├── storage/storage_test.py
+│   │   │   ├── power/power_test.py
 │   │   │   ├── network/network_test.py
 │   │   │   ├── usb/usb_test.py
 │   │   │   ├── hdmi/hdmi_test.py
 │   │   │   ├── gpio/gpio_test.py
+│   │   │   ├── bootloader/bootloader_test.py
+│   │   │   ├── peripherals/peripherals_test.py
 │   │   │   └── report_builder.py
 │   │   ├── exports/
 │   │   │   ├── export_usb.py
@@ -127,10 +131,13 @@ Replace `cpu` / `run_cpu_quick_test` with any module name. Available modules:
 | cpu | `run_cpu_quick_test()` |
 | ram | `run_ram_quick_test()` |
 | storage | `run_storage_quick_test()` |
+| power | `run_power_quick_test()` |
 | network | `run_network_quick_test()` |
 | usb | `run_usb_quick_test()` |
 | hdmi | `run_hdmi_quick_test()` |
 | gpio | `run_gpio_quick_test()` |
+| bootloader | `run_bootloader_quick_test()` |
+| peripherals | `run_peripherals_quick_test()` |
 
 ### RAM test CLI
 
