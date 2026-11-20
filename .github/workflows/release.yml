@@ -1,7 +1,7 @@
 name: Release — Failsafe Initramfs
 
-# Manual workflow to rebuild and attach the standalone ARM64 failsafe initramfs
-# (build/initramfs.cpio.gz) to an existing release tag.
+# Manual workflow to rebuild and attach the standalone versioned ARM64 failsafe
+# initramfs (apple-pi-diagnostics-initramfs-<tag>.cpio.gz) to an existing tag.
 #
 # Regular tag pushes (v*.*.*) build and upload both the Pi image and the ARM64
 # failsafe initramfs atomically in build-release.yml so there is no race
@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to attach the initramfs to (e.g. v1.1.4)"
+        description: "Release tag to attach the initramfs to (e.g. v1.1.5)"
         required: true
         type: string
 
@@ -36,28 +36,29 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends busybox-static cpio gzip
 
-      - name: Build failsafe initramfs
+      - name: Build versioned failsafe initramfs
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
+          INITRAMFS_FILE="apple-pi-diagnostics-initramfs-${TAG}.cpio.gz"
           chmod +x build_failsafe.sh
           sudo ./build_failsafe.sh
           sudo chown -R "$(id -u):$(id -g)" build
-
-      - name: Verify build output and checksum
-        run: |
           [[ -f build/initramfs.cpio.gz ]] \
             || { echo "ERROR: build/initramfs.cpio.gz not found — build failed"; exit 1; }
-          [[ -f build/initramfs.cpio.gz.sha256 ]] \
-            || { echo "ERROR: build/initramfs.cpio.gz.sha256 not found — build failed"; exit 1; }
-          sha256sum -c build/initramfs.cpio.gz.sha256
+          cp build/initramfs.cpio.gz "build/${INITRAMFS_FILE}"
+          (cd build && sha256sum "${INITRAMFS_FILE}" > "${INITRAMFS_FILE}.sha256")
+          (cd build && sha256sum -c "${INITRAMFS_FILE}.sha256")
 
       - name: Upload initramfs artifacts to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
         run: |
+          INITRAMFS_FILE="apple-pi-diagnostics-initramfs-${TAG}.cpio.gz"
           gh release view "${TAG}" >/dev/null 2>&1 \
             || gh release create "${TAG}" --title "Apple Pi Diagnostics ${TAG}" --notes ""
           gh release upload "${TAG}" \
-            build/initramfs.cpio.gz \
-            build/initramfs.cpio.gz.sha256 \
+            "build/${INITRAMFS_FILE}" \
+            "build/${INITRAMFS_FILE}.sha256" \
             --clobber

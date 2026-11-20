@@ -1,11 +1,8 @@
 name: Validate Release
 
 # Triggered automatically when a GitHub Release is published.
-# Downloads the release assets, verifies the SHA256 checksum matches the
-# published .sha256 file, and validates that os_list.json was correctly stamped
-# (no placeholder values remain, required fields are present).
-# Catches corrupted uploads or stamping bugs before users download the image.
-
+# Downloads the versioned release assets, verifies their SHA256 checksums, and
+# validates that os_list.json was stamped with the exact release tag and URL.
 on:
   release:
     types: [ published ]
@@ -30,15 +27,17 @@ jobs:
           TAG: ${{ github.event.release.tag_name }}
         run: |
           gh release download "${TAG}" \
-            --pattern "apple-pi-diagnostics.img.xz" \
-            --pattern "apple-pi-diagnostics.img.xz.sha256" \
-            --pattern "initramfs.cpio.gz" \
-            --pattern "initramfs.cpio.gz.sha256" \
+            --pattern "apple-pi-diagnostics-${TAG}.img.xz" \
+            --pattern "apple-pi-diagnostics-${TAG}.img.xz.sha256" \
+            --pattern "apple-pi-diagnostics-initramfs-${TAG}.cpio.gz" \
+            --pattern "apple-pi-diagnostics-initramfs-${TAG}.cpio.gz.sha256" \
             --pattern "os_list.json"
 
       - name: Verify SHA256 checksums
+        env:
+          TAG: ${{ github.event.release.tag_name }}
         run: |
-          for asset in apple-pi-diagnostics.img.xz initramfs.cpio.gz; do
+          for asset in "apple-pi-diagnostics-${TAG}.img.xz" "apple-pi-diagnostics-initramfs-${TAG}.cpio.gz"; do
             EXPECTED=$(awk '{print $1}' "${asset}.sha256")
             ACTUAL=$(sha256sum "${asset}" | awk '{print $1}')
             if [ "$EXPECTED" != "$ACTUAL" ]; then
@@ -64,16 +63,16 @@ jobs:
           assert len(data["os_list"]) > 0, "'os_list' array is empty"
 
           entry = data["os_list"][0]
-          required_fields = ["url", "extract_size", "image_download_size", "release_date", "sha256sum"]
+          required_fields = ["name", "url", "extract_size", "image_download_size", "release_date", "sha256sum"]
           for field in required_fields:
               assert field in entry, f"Missing required field: '{field}'"
 
-          # Verify placeholder values were replaced and URL matches this release tag
           tag = os.environ["TAG"]
-          assert entry["url"] != "RELEASE_URL_PLACEHOLDER", \
-              "url field still contains placeholder — stamping failed"
-          assert f"/releases/download/{tag}/" in entry["url"], \
-              f"url '{entry['url']}' does not point to tag '{tag}'"
+          expected_filename = f"apple-pi-diagnostics-{tag}.img.xz"
+          assert tag in entry["name"], \
+              f"name '{entry['name']}' does not contain tag '{tag}'"
+          assert f"/releases/download/{tag}/{expected_filename}" in entry["url"], \
+              f"url '{entry['url']}' does not point to '{expected_filename}' for tag '{tag}'"
           assert entry["sha256sum"] != "SHA256_PLACEHOLDER", \
               "sha256sum field still contains placeholder — stamping failed"
           assert entry["extract_size"] > 0, \
@@ -84,6 +83,7 @@ jobs:
               "release_date field still contains placeholder — stamping failed"
 
           print("os_list.json validation passed")
+          print(f"  Name:          {entry['name']}")
           print(f"  URL:           {entry['url']}")
           print(f"  Release date:  {entry['release_date']}")
           print(f"  Download size: {entry['image_download_size']:,} bytes")

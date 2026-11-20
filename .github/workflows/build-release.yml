@@ -1,9 +1,9 @@
 name: Build & Release Pi Image
 
-# Triggered by pushing a version tag, e.g.: git tag v1.1.4 && git push --tags
-# Builds both the flashable Pi OS image (apple-pi-diagnostics.img.xz) and the
-# ARM64 failsafe initramfs (initramfs.cpio.gz) natively on ARM64, stamps
-# os_list.json, and publishes all release assets atomically in a single release.
+# Triggered by pushing a version tag, e.g.: git tag v1.1.5 && git push --tags
+# Builds both the versioned flashable Pi OS image (apple-pi-diagnostics-<tag>.img.xz)
+# and the versioned ARM64 failsafe initramfs (apple-pi-diagnostics-initramfs-<tag>.cpio.gz)
+# natively on ARM64, stamps os_list.json, and publishes all release assets atomically.
 on:
   push:
     tags:
@@ -54,26 +54,29 @@ jobs:
           key: base-raspios-lite-arm64-2025-05-13
 
       # -----------------------------------------------------------------------
-      # 4. Build ARM64 failsafe initramfs
+      # 4. Build versioned ARM64 failsafe initramfs
       # -----------------------------------------------------------------------
       - name: Build ARM64 failsafe initramfs
         run: |
+          TAG="${GITHUB_REF_NAME}"
+          INITRAMFS_FILE="apple-pi-diagnostics-initramfs-${TAG}.cpio.gz"
           chmod +x build_failsafe.sh
           sudo ./build_failsafe.sh
           sudo chown -R "$(id -u):$(id -g)" build
           [[ -f build/initramfs.cpio.gz ]] \
             || { echo "ERROR: build/initramfs.cpio.gz not found"; exit 1; }
-          [[ -f build/initramfs.cpio.gz.sha256 ]] \
-            || { echo "ERROR: build/initramfs.cpio.gz.sha256 not found"; exit 1; }
+          cp build/initramfs.cpio.gz "build/${INITRAMFS_FILE}"
+          (cd build && sha256sum "${INITRAMFS_FILE}" > "${INITRAMFS_FILE}.sha256")
 
       # -----------------------------------------------------------------------
-      # 5. Build the flashable Pi image (native ARM64 chroot)
+      # 5. Build the versioned flashable Pi image (native ARM64 chroot)
       # -----------------------------------------------------------------------
       - name: Build apple-pi-diagnostics image
         run: |
+          TAG="${GITHUB_REF_NAME}"
           chmod +x build-image.sh
-          sudo ./build-image.sh
-          sudo chown -R "$(id -u):$(id -g)" build apple-pi-diagnostics.img*
+          sudo ./build-image.sh --version "${TAG}"
+          sudo chown -R "$(id -u):$(id -g)" build "apple-pi-diagnostics-${TAG}".img*
 
       # -----------------------------------------------------------------------
       # 6. Read output metadata
@@ -81,28 +84,38 @@ jobs:
       - name: Read build metadata
         id: meta
         run: |
-          XZ_FILE="apple-pi-diagnostics.img.xz"
-          [[ -f "$XZ_FILE" ]]                      || { echo "ERROR: $XZ_FILE not found — build failed"; exit 1; }
-          [[ -f "${XZ_FILE}.sha256" ]]             || { echo "ERROR: SHA256 file not found — build failed"; exit 1; }
-          [[ -f "apple-pi-diagnostics.img" ]]      || { echo "ERROR: .img not found — build failed"; exit 1; }
-          SHA256=$(awk '{print $1}' apple-pi-diagnostics.img.xz.sha256)
-          XZ_SIZE=$(stat -c%s "${XZ_FILE}")
-          RAW_SIZE=$(stat -c%s "apple-pi-diagnostics.img")
           TAG="${GITHUB_REF_NAME}"
+          RAW_FILE="apple-pi-diagnostics-${TAG}.img"
+          XZ_FILE="${RAW_FILE}.xz"
+          INITRAMFS_FILE="apple-pi-diagnostics-initramfs-${TAG}.cpio.gz"
+
+          [[ -f "${XZ_FILE}" ]]                    || { echo "ERROR: ${XZ_FILE} not found — build failed"; exit 1; }
+          [[ -f "${XZ_FILE}.sha256" ]]             || { echo "ERROR: ${XZ_FILE}.sha256 not found — build failed"; exit 1; }
+          [[ -f "${RAW_FILE}" ]]                   || { echo "ERROR: ${RAW_FILE} not found — build failed"; exit 1; }
+          [[ -f "build/${INITRAMFS_FILE}" ]]       || { echo "ERROR: build/${INITRAMFS_FILE} not found"; exit 1; }
+          [[ -f "build/${INITRAMFS_FILE}.sha256" ]] || { echo "ERROR: build/${INITRAMFS_FILE}.sha256 not found"; exit 1; }
+
+          SHA256=$(awk '{print $1}' "${XZ_FILE}.sha256")
+          XZ_SIZE=$(stat -c%s "${XZ_FILE}")
+          RAW_SIZE=$(stat -c%s "${RAW_FILE}")
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/download/${TAG}/${XZ_FILE}"
           RELEASE_DATE=$(date -u +%Y-%m-%d)
 
-          echo "sha256=${SHA256}"         >> "$GITHUB_OUTPUT"
-          echo "xz_size=${XZ_SIZE}"       >> "$GITHUB_OUTPUT"
-          echo "raw_size=${RAW_SIZE}"     >> "$GITHUB_OUTPUT"
-          echo "release_url=${RELEASE_URL}" >> "$GITHUB_OUTPUT"
-          echo "release_date=${RELEASE_DATE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"                        >> "$GITHUB_OUTPUT"
+          echo "xz_file=${XZ_FILE}"                >> "$GITHUB_OUTPUT"
+          echo "initramfs_file=${INITRAMFS_FILE}"  >> "$GITHUB_OUTPUT"
+          echo "sha256=${SHA256}"                  >> "$GITHUB_OUTPUT"
+          echo "xz_size=${XZ_SIZE}"                >> "$GITHUB_OUTPUT"
+          echo "raw_size=${RAW_SIZE}"              >> "$GITHUB_OUTPUT"
+          echo "release_url=${RELEASE_URL}"        >> "$GITHUB_OUTPUT"
+          echo "release_date=${RELEASE_DATE}"      >> "$GITHUB_OUTPUT"
 
       # -----------------------------------------------------------------------
-      # 7. Stamp os_list.json with real values
+      # 7. Stamp os_list.json with versioned name, URL, sizes, and SHA256
       # -----------------------------------------------------------------------
       - name: Stamp os_list.json
         env:
+          TAG: ${{ steps.meta.outputs.tag }}
           RELEASE_URL: ${{ steps.meta.outputs.release_url }}
           SHA256: ${{ steps.meta.outputs.sha256 }}
           XZ_SIZE: ${{ steps.meta.outputs.xz_size }}
@@ -116,6 +129,7 @@ jobs:
               data = json.load(f)
 
           entry = data["os_list"][0]
+          entry["name"] = f"Apple Pi Diagnostics {os.environ['TAG']}"
           entry["url"] = os.environ["RELEASE_URL"]
           entry["sha256sum"] = os.environ["SHA256"]
           entry["extract_size"] = int(os.environ["RAW_SIZE"])
@@ -135,17 +149,19 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Write release notes
         env:
+          TAG: ${{ steps.meta.outputs.tag }}
+          XZ_FILE: ${{ steps.meta.outputs.xz_file }}
+          INITRAMFS_FILE: ${{ steps.meta.outputs.initramfs_file }}
           REPOSITORY: ${{ github.repository }}
           SERVER_URL: ${{ github.server_url }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           ## Apple Pi Diagnostics ${TAG}
 
           ### How to flash
           1. Open **Raspberry Pi Imager**
           2. Click **"Choose OS"** → scroll to the bottom → **"Use custom"**
-          3. Select \`apple-pi-diagnostics.img.xz\` (or paste the download URL)
+          3. Select \`${XZ_FILE}\` (or paste the download URL)
           4. Choose **No** when prompted for OS customisation settings
           5. Flash to SD card, insert into your Pi and power on
 
@@ -156,8 +172,8 @@ jobs:
           \`\`\`
 
           ### Included assets
-          - \`apple-pi-diagnostics.img.xz\` (+ \`.sha256\`) — flashable Raspberry Pi OS Bookworm 64-bit diagnostic image
-          - \`initramfs.cpio.gz\` (+ \`.sha256\`) — standalone ARM64 failsafe initramfs
+          - \`${XZ_FILE}\` (+ \`.sha256\`) — flashable Raspberry Pi OS Bookworm 64-bit diagnostic image
+          - \`${INITRAMFS_FILE}\` (+ \`.sha256\`) — standalone ARM64 failsafe initramfs
           - \`os_list.json\` — Raspberry Pi Imager manifest
 
           ### Supported hardware
@@ -168,28 +184,30 @@ jobs:
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          XZ_FILE: ${{ steps.meta.outputs.xz_file }}
+          INITRAMFS_FILE: ${{ steps.meta.outputs.initramfs_file }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           if gh release view "${TAG}" >/dev/null 2>&1; then
             gh release edit "${TAG}" \
               --title "Apple Pi Diagnostics ${TAG}" \
               --notes-file "$RUNNER_TEMP/release-notes.md"
             gh release upload "${TAG}" \
-              "apple-pi-diagnostics.img.xz" \
-              "apple-pi-diagnostics.img.xz.sha256" \
+              "${XZ_FILE}" \
+              "${XZ_FILE}.sha256" \
               "os_list.json" \
-              "build/initramfs.cpio.gz" \
-              "build/initramfs.cpio.gz.sha256" \
+              "build/${INITRAMFS_FILE}" \
+              "build/${INITRAMFS_FILE}.sha256" \
               --clobber
           else
             gh release create "${TAG}" \
               --title "Apple Pi Diagnostics ${TAG}" \
               --notes-file "$RUNNER_TEMP/release-notes.md" \
-              "apple-pi-diagnostics.img.xz" \
-              "apple-pi-diagnostics.img.xz.sha256" \
+              "${XZ_FILE}" \
+              "${XZ_FILE}.sha256" \
               "os_list.json" \
-              "build/initramfs.cpio.gz" \
-              "build/initramfs.cpio.gz.sha256"
+              "build/${INITRAMFS_FILE}" \
+              "build/${INITRAMFS_FILE}.sha256"
           fi
 
       # -----------------------------------------------------------------------
@@ -198,8 +216,8 @@ jobs:
       - name: Commit stamped os_list.json to main
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.meta.outputs.tag }}
         run: |
-          TAG="${GITHUB_REF_NAME}"
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 

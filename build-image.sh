@@ -11,7 +11,7 @@
 #                        parted e2fsprogs rsync wget
 #
 # Usage:
-#   sudo ./build-image.sh [--base-image path/to/base.img.xz]
+#   sudo ./build-image.sh [--base-image path/to/base.img.xz] [--version v1.2.3]
 #
 set -euo pipefail
 
@@ -23,9 +23,7 @@ BUILD_DIR="${SCRIPT_DIR}/build"
 MOUNT_BOOT="${BUILD_DIR}/mnt/boot"
 MOUNT_ROOT="${BUILD_DIR}/mnt/root"
 WORK_IMG="${BUILD_DIR}/apple-pi-diagnostics-work.img"
-OUT_IMG="${SCRIPT_DIR}/apple-pi-diagnostics.img"
-OUT_XZ="${OUT_IMG}.xz"
-OUT_SHA="${OUT_XZ}.sha256"
+VERSION=""
 
 # Base image — Raspberry Pi OS Lite 64-bit (Bookworm) 2025-05-13
 BASE_URL="https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2025-05-13/2025-05-13-raspios-bookworm-arm64-lite.img.xz"
@@ -95,9 +93,24 @@ trap cleanup EXIT
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --base-image) BASE_XZ="$2"; shift 2 ;;
+        --version) VERSION="$2"; shift 2 ;;
         *) die "Unknown argument: $1" ;;
     esac
 done
+
+# Auto-detect version from an exact git tag if --version was not provided
+if [ -z "${VERSION}" ] && command -v git &>/dev/null; then
+    VERSION="$(git -C "${SCRIPT_DIR}" describe --tags --exact-match 2>/dev/null || true)"
+fi
+
+if [ -n "${VERSION}" ]; then
+    IMG_BASENAME="apple-pi-diagnostics-${VERSION}"
+else
+    IMG_BASENAME="apple-pi-diagnostics"
+fi
+OUT_IMG="${SCRIPT_DIR}/${IMG_BASENAME}.img"
+OUT_XZ="${OUT_IMG}.xz"
+OUT_SHA="${OUT_XZ}.sha256"
 
 # ---------------------------------------------------------------------------
 # Step 0: Preflight
@@ -284,7 +297,7 @@ xz -T0 -9 --keep "${OUT_IMG}"
 mv "${OUT_IMG}.xz" "${OUT_XZ}" 2>/dev/null || true
 
 info "Generating SHA256 checksum..."
-sha256sum "${OUT_XZ}" > "${OUT_SHA}"
+(cd "${SCRIPT_DIR}" && sha256sum "$(basename "${OUT_XZ}")" > "$(basename "${OUT_SHA}")")
 
 # Print final sizes for os_list.json
 XZ_SIZE=$(stat -c%s "${OUT_XZ}")
