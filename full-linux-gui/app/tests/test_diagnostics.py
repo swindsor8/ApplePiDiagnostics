@@ -200,6 +200,50 @@ class TestGPIO:
 
 
 # ---------------------------------------------------------------------------
+# Power & Thermal
+# ---------------------------------------------------------------------------
+
+class TestPower:
+    def test_returns_valid_result(self):
+        from diagnostics.power.power_test import run_power_quick_test
+        result = run_power_quick_test()
+        _assert_valid_result(result, "power")
+
+    def test_decode_throttled_flags(self):
+        from diagnostics.power.power_test import decode_throttled_flags
+        clean = decode_throttled_flags(0x0)
+        assert clean["active_issues"] == []
+        assert clean["historical_issues"] == []
+
+        uv_now = decode_throttled_flags(0x50005)
+        assert len(uv_now["active_issues"]) == 2
+        assert len(uv_now["historical_issues"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Bootloader & Board Info
+# ---------------------------------------------------------------------------
+
+class TestBootloader:
+    def test_returns_valid_result(self):
+        from diagnostics.bootloader.bootloader_test import run_bootloader_quick_test
+        result = run_bootloader_quick_test()
+        _assert_valid_result(result, "bootloader")
+
+
+# ---------------------------------------------------------------------------
+# Peripherals (I2C, SPI, BT, Audio, Camera)
+# ---------------------------------------------------------------------------
+
+class TestPeripherals:
+    def test_returns_valid_result(self):
+        from diagnostics.peripherals.peripherals_test import run_peripherals_quick_test
+        result = run_peripherals_quick_test()
+        _assert_valid_result(result, "peripherals")
+        assert "i2c_buses" in result and isinstance(result["i2c_buses"], list)
+
+
+# ---------------------------------------------------------------------------
 # Config module
 # ---------------------------------------------------------------------------
 
@@ -225,6 +269,13 @@ class TestConfig:
         assert _get_report_dir() == report_dir
         assert report_dir.is_dir()
 
+    def test_app_version_discovery(self, monkeypatch):
+        from config import APP_VERSION, get_app_version
+
+        assert isinstance(APP_VERSION, str) and len(APP_VERSION) > 0
+        monkeypatch.setenv("APD_VERSION", "v9.9.9-test")
+        assert get_app_version() == "v9.9.9-test"
+
 
 # ---------------------------------------------------------------------------
 # Report builder — smoke test (no PDF rendering, just HTML/JSON)
@@ -234,15 +285,19 @@ class TestReportBuilder:
     def test_build_report_smoke(self, tmp_path):
         from diagnostics.report_builder import build_report
         dummy_results = {
-            "cpu":     {"status": "OK", "cpu_percent": 5.0},
-            "ram":     {"status": "OK", "total_mb": 4096, "errors": []},
-            "network": {"status": "OK", "ping": [], "dns": {"ok": True}},
-            "storage": {"status": "OK", "devices": []},
-            "usb":     {"status": "UNSUPPORTED"},
-            "hdmi":    {"status": "OK"},
-            "gpio":    {"status": "UNSUPPORTED"},
+            "cpu":         {"status": "OK", "cpu_percent": 5.0},
+            "ram":         {"status": "OK", "total_mb": 4096, "errors": []},
+            "network":     {"status": "OK", "ping": [], "dns": {"ok": True}},
+            "sd":          {"status": "OK", "devices": []},
+            "power":       {"status": "OK", "temperature_c": 48.2, "note": "Healthy"},
+            "bootloader":  {"status": "UNSUPPORTED", "note": "Non-Pi"},
+            "peripherals": {"status": "OK", "i2c_buses": ["i2c-1"], "note": "I2C: 1"},
+            "usb":         {"status": "UNSUPPORTED"},
+            "hdmi":        {"status": "OK"},
+            "gpio":        {"status": "UNSUPPORTED"},
         }
-        # Should not raise; returns dict of format -> Path
-        paths = build_report(dummy_results, str(tmp_path), formats=["html", "json"])
+        paths = build_report(dummy_results, str(tmp_path), formats=["html", "json", "pdf"])
         assert "html" in paths and str(paths["html"]).endswith(".html"), "Expected HTML report"
         assert "json" in paths and str(paths["json"]).endswith(".json"), "Expected JSON report"
+        assert "pdf" in paths and str(paths["pdf"]).endswith(".pdf"), "Expected PDF report"
+        assert "Version:" in paths["html"].read_text(encoding="utf-8")

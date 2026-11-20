@@ -12,16 +12,36 @@ from config import GATEWAY_PROBE_HOST, QR_HTTP_PORT
 
 
 def get_local_ip():
-    # return local IPv4 address or None
+    """Return a non-loopback local IPv4 address (works online and on offline LANs)."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # doesn't have to be reachable; used only to discover local interface IP
+        # doesn't have to be reachable; used only to discover default-route interface IP
         s.connect((GATEWAY_PROBE_HOST, 80))
         ip = s.getsockname()[0]
         s.close()
-        return ip
+        if ip and not ip.startswith("127."):
+            return ip
     except Exception:
-        return None
+        pass
+
+    # Offline LAN fallback: inspect active interfaces via psutil
+    try:
+        import psutil
+        stats = psutil.net_if_stats()
+        addrs = psutil.net_if_addrs()
+        for name, if_addrs in addrs.items():
+            if name == "lo":
+                continue
+            st = stats.get(name)
+            if st and not st.isup:
+                continue
+            for addr in if_addrs:
+                if addr.family == socket.AF_INET and addr.address and not addr.address.startswith("127."):
+                    return addr.address
+    except Exception:
+        pass
+
+    return None
 
 class _ThreadedHTTPServer(threading.Thread):
     def __init__(self, directory, port=QR_HTTP_PORT, bind_address="127.0.0.1"):

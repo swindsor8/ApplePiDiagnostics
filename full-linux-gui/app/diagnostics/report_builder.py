@@ -37,6 +37,11 @@ try:
 except Exception:
     LOGO_PATH = None
 
+try:
+    from config import APP_VERSION
+except Exception:
+    APP_VERSION = "dev"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -74,6 +79,7 @@ def _prepare_logo_for_pdf() -> Optional[str]:
 
 def _collect_system_metadata() -> Dict[str, Any]:
     md: Dict[str, Any] = {}
+    md["app_version"] = APP_VERSION
     md["timestamp"] = time.time()
     md["generated"] = time.ctime(md["timestamp"])
     md["hostname"] = socket.gethostname()
@@ -158,6 +164,64 @@ def _summarize_test(test_id: str, result: Dict[str, Any]) -> List[str]:
             else:
                 speed = ""
             lines.append(f"{name} ({size_str}{fs}): {dev_status}{speed}.")
+            sd_meta = dev.get("sd_metadata")
+            if sd_meta:
+                meta_str = ", ".join(f"{k}={v}" for k, v in sd_meta.items())
+                lines.append(f"  \u2022 SD Card CID: {meta_str}.")
+            smart = dev.get("smart_health")
+            if smart:
+                lines.append(f"  \u2022 SMART: {smart}.")
+        mmc_errors = result.get("mmc_dmesg_errors") or []
+        if mmc_errors:
+            lines.append(f"Kernel MMC warnings ({len(mmc_errors)}): {mmc_errors[-1]}")
+
+    elif test_id == "power":
+        temp = result.get("temperature_c")
+        if temp is not None:
+            lines.append(f"SoC temperature: {temp:.1f} \u00b0C.")
+        clk = result.get("arm_clock_mhz")
+        if clk is not None:
+            lines.append(f"ARM clock: {clk:.0f} MHz.")
+        volts = result.get("voltages") or {}
+        if volts:
+            v_str = ", ".join(f"{k}={v:.3f}V" for k, v in volts.items())
+            lines.append(f"Rails: {v_str}.")
+        throttled = result.get("throttled")
+        if isinstance(throttled, dict):
+            lines.append(f"Throttle flags: {throttled.get('raw', '0x0')}.")
+        note = result.get("note", "")
+        if note:
+            lines.append(note)
+
+    elif test_id == "bootloader":
+        if result.get("model"):
+            lines.append(f"Board: {result['model']}.")
+        if result.get("revision"):
+            lines.append(f"Revision: {result['revision']}.")
+        if result.get("serial"):
+            lines.append(f"Serial: {result['serial']}.")
+        if result.get("bootloader_version"):
+            lines.append(f"Bootloader: {result['bootloader_version']}.")
+        if result.get("eeprom_status"):
+            lines.append(f"EEPROM: {result['eeprom_status']}.")
+        note = result.get("note", "")
+        if note:
+            lines.append(note)
+
+    elif test_id == "peripherals":
+        for label_p, key_p in (
+            ("I2C buses", "i2c_buses"),
+            ("SPI devices", "spi_devices"),
+            ("Bluetooth", "bluetooth_adapters"),
+            ("Audio", "audio_devices"),
+            ("Cameras", "cameras"),
+        ):
+            vals = result.get(key_p) or []
+            if vals:
+                lines.append(f"{label_p}: {', '.join(vals[:4])}.")
+        note = result.get("note", "")
+        if note and not lines:
+            lines.append(note)
 
     elif test_id == "network":
         local_ip = result.get("local_ip")
@@ -239,6 +303,8 @@ def _status_label(status: str) -> Tuple[str, str]:
         return "Passed", "#1a8a4a"
     if s in ("FAIL", "ERROR"):
         return "Failed", "#cc2200"
+    if s == "WARNING":
+        return "Warning", "#b06000"
     if s == "UNSUPPORTED":
         return "Not supported", "#b06000"
     if s == "RUNNING":
@@ -247,8 +313,9 @@ def _status_label(status: str) -> Tuple[str, str]:
 
 
 _TEST_LABELS = {
-    "cpu": "CPU", "ram": "RAM", "sd": "Storage",
+    "cpu": "CPU", "ram": "RAM", "sd": "Storage", "power": "Power & Thermal",
     "network": "Network", "usb": "USB", "hdmi": "HDMI", "gpio": "GPIO",
+    "bootloader": "Bootloader & Board", "peripherals": "Peripherals",
 }
 
 
@@ -333,6 +400,8 @@ def _write_html_report(report: Dict[str, Any], out_path: Path) -> Path:
             return '<span class="badge pass">Passed</span>'
         if s in ("FAIL", "ERROR"):
             return '<span class="badge fail">Failed</span>'
+        if s == "WARNING":
+            return '<span class="badge unsupported">Warning</span>'
         if s == "UNSUPPORTED":
             return '<span class="badge unsupported">Not supported</span>'
         return '<span class="badge other">Pending</span>'
@@ -358,7 +427,7 @@ def _write_html_report(report: Dict[str, Any], out_path: Path) -> Path:
         "</head><body>",
         f"<header>{logo_tag}<div>",
         f"<h1>{html.escape(title)}</h1>",
-        f'<div class="meta">Generated: {html.escape(meta.get("generated", ""))}',
+        f'<div class="meta">Version: {html.escape(str(meta.get("app_version", APP_VERSION)))} &nbsp;|&nbsp; Generated: {html.escape(meta.get("generated", ""))}',
         f" &nbsp;|&nbsp; Host: {html.escape(meta.get('hostname', ''))}" if meta.get("hostname") else "",
         f" &nbsp;|&nbsp; {html.escape(os_name)}" if os_name else "",
         f" &nbsp;|&nbsp; {html.escape(pi_model)}" if pi_model else "",
@@ -440,6 +509,7 @@ def _write_pdf_report(report: Dict[str, Any], out_path: Path) -> Path:
         "PASS": colors.HexColor("#1a8a4a"),
         "FAIL": colors.HexColor("#cc2200"),
         "ERROR": colors.HexColor("#cc2200"),
+        "WARNING": colors.HexColor("#b06000"),
         "UNSUPPORTED": colors.HexColor("#b06000"),
     }
 
@@ -453,13 +523,14 @@ def _write_pdf_report(report: Dict[str, Any], out_path: Path) -> Path:
     story = []
 
     # Header row: logo + title/meta
+    app_ver = meta.get("app_version", APP_VERSION)
     logo_png = _prepare_logo_for_pdf()
     if logo_png:
         try:
             logo_img = RLImage(logo_png, width=52, height=52)
             header_data = [[logo_img,
                 [Paragraph(title_text, title_style),
-                 Paragraph(f"Generated: {meta.get('generated', '')}", meta_style),
+                 Paragraph(f"Version: {app_ver}  |  Generated: {meta.get('generated', '')}", meta_style),
                  Paragraph(f"Host: {meta.get('hostname', '')}  |  {os_name}" + (f"  |  {pi_model}" if pi_model else ""), meta_style)]]]
             header_table = Table(header_data, colWidths=[64, 400])
             header_table.setStyle(TableStyle([
@@ -472,10 +543,10 @@ def _write_pdf_report(report: Dict[str, Any], out_path: Path) -> Path:
             story.append(header_table)
         except Exception:
             story.append(Paragraph(title_text, title_style))
-            story.append(Paragraph(f"Generated: {meta.get('generated', '')}", meta_style))
+            story.append(Paragraph(f"Version: {app_ver}  |  Generated: {meta.get('generated', '')}", meta_style))
     else:
         story.append(Paragraph(title_text, title_style))
-        story.append(Paragraph(f"Generated: {meta.get('generated', '')}", meta_style))
+        story.append(Paragraph(f"Version: {app_ver}  |  Generated: {meta.get('generated', '')}", meta_style))
         info_parts = [p for p in [meta.get("hostname", ""), os_name, pi_model] if p]
         if info_parts:
             story.append(Paragraph("  |  ".join(info_parts), meta_style))

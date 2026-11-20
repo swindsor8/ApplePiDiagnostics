@@ -6,6 +6,11 @@ import os
 from pathlib import Path
 from PyQt5 import QtWidgets, QtGui, QtCore
 
+try:
+    from config import APP_VERSION
+except Exception:
+    APP_VERSION = "dev"
+
 
 def _find_logo_filename(name_without_ext="apple_pi_logo"):
     """Search parent folders for an `assets/` dir that contains the logo."""
@@ -93,15 +98,18 @@ def _check_diagnostics():
         ("diagnostics.usb.usb_test", "run_usb_quick_test"),
         ("diagnostics.hdmi.hdmi_test", "run_hdmi_quick_test"),
         ("diagnostics.gpio.gpio_test", "run_gpio_quick_test"),
+        ("diagnostics.power.power_test", "run_power_quick_test"),
+        ("diagnostics.bootloader.bootloader_test", "run_bootloader_quick_test"),
+        ("diagnostics.peripherals.peripherals_test", "run_peripherals_quick_test"),
     ]
     for mod, attr in modules:
         try:
             m = __import__(mod, fromlist=[attr])
             if not hasattr(m, attr):
                 return False, f"{mod} missing {attr}"
-        except Exception as e:
+        except Exception:
             return False, f"Import failed: {mod.split('.')[-2]}"
-    return True, "All modules loaded"
+    return True, f"All {len(modules)} modules loaded"
 
 
 _CHECKS = [
@@ -150,7 +158,7 @@ class SplashScreen(QtWidgets.QDialog):
             logo_label.setStyleSheet("font-size:20px; font-weight:600; color:#ffffff;")
         layout.addWidget(logo_label, alignment=QtCore.Qt.AlignCenter)
 
-        # Title
+        # Title + version
         title = QtWidgets.QLabel("Apple Pi Diagnostics")
         title.setAlignment(QtCore.Qt.AlignCenter)
         title.setStyleSheet("""
@@ -160,6 +168,11 @@ class SplashScreen(QtWidgets.QDialog):
             color: #ffffff;
         """)
         layout.addWidget(title, alignment=QtCore.Qt.AlignCenter)
+
+        ver_lbl = QtWidgets.QLabel(f"Version {APP_VERSION}")
+        ver_lbl.setAlignment(QtCore.Qt.AlignCenter)
+        ver_lbl.setStyleSheet("font-size: 12px; color: rgba(255,255,255,0.75);")
+        layout.addWidget(ver_lbl, alignment=QtCore.Qt.AlignCenter)
 
         # Divider
         div = QtWidgets.QFrame()

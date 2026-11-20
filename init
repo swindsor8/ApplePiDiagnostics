@@ -108,6 +108,58 @@ log_msg() {
     echo "[APD-FAILSAFE] $1" | /bin/busybox tee -a /tmp/failsafe.log
 }
 
+run_extra_diagnostics() {
+    for script in /diagnostics/basic/*.sh /diagnostics/storage/*.sh /diagnostics/hardware/*.sh /diagnostics/network/*.sh; do
+        if [ -x "$script" ]; then
+            "$script" >> /tmp/failsafe.log 2>&1 || true
+        fi
+    done
+}
+
+failsafe_menu() {
+    while true; do
+        display_text ""
+        display_text "----- Failsafe Recovery Menu -----"
+        display_text "  1) View failsafe diagnostic log"
+        display_text "  2) View recent kernel dmesg"
+        display_text "  3) Save logs to USB drive (/dev/sda1)"
+        display_text "  4) Open failsafe shell (/bin/sh)"
+        display_text "  5) Reboot"
+        /bin/busybox printf 'Select [1-5]: '
+        read -r choice || break
+        case "$choice" in
+            1)
+                /bin/busybox cat /tmp/failsafe.log 2>/dev/null || echo "(no log)"
+                ;;
+            2)
+                /bin/busybox dmesg 2>/dev/null | /bin/busybox tail -n 40 || echo "(dmesg unavailable)"
+                ;;
+            3)
+                /bin/busybox mkdir -p /tmp/usblog
+                if [ -b /dev/sda1 ] && /bin/busybox mount /dev/sda1 /tmp/usblog 2>/dev/null; then
+                    /bin/busybox cp /tmp/failsafe.log /tmp/usblog/apd-failsafe.log 2>/dev/null || true
+                    /bin/busybox dmesg > /tmp/usblog/apd-dmesg.log 2>/dev/null || true
+                    /bin/busybox sync
+                    /bin/busybox umount /tmp/usblog 2>/dev/null || true
+                    display_status "OK" "Logs saved to USB (/dev/sda1)"
+                else
+                    display_status "WARNING" "Could not mount /dev/sda1"
+                fi
+                ;;
+            4)
+                exec /bin/busybox sh
+                ;;
+            5)
+                /bin/busybox reboot -f
+                ;;
+            *)
+                display_text "Invalid option."
+                ;;
+        esac
+    done
+    exec /bin/busybox sh
+}
+
 resolve_root_device() {
     root_param=""
     if [ -f "/proc/cmdline" ]; then
@@ -251,6 +303,8 @@ check_power
 
 check_cpu
 
+run_extra_diagnostics
+
 # Summary
 display_text ""
 display_text "========================================"
@@ -264,9 +318,9 @@ display_text ""
 # 6. Determine action based on results
 if [ "$CHECKS_FAILED" -gt 0 ]; then
     display_status "FAIL" "Critical hardware failure detected!"
-    display_text "System cannot boot. Entering failsafe console."
+    display_text "System cannot boot. Entering failsafe recovery menu."
     blink_fail &
-    exec /bin/busybox sh
+    failsafe_menu
 elif [ "$STORAGE_OK" -eq 0 ]; then
     # Try to boot main system
     display_text "Attempting to mount root filesystem..."
@@ -308,16 +362,16 @@ elif [ "$STORAGE_OK" -eq 0 ]; then
             display_status "WARNING" "Root filesystem mounted ($ROOT_DEV) but init not found"
             display_text "Staying in failsafe mode."
             blink_warning
-            exec /bin/busybox sh
+            failsafe_menu
         fi
     else
         display_status "WARNING" "Cannot mount root filesystem (${ROOT_DEV:-not found})"
         display_text "Staying in failsafe mode."
         blink_warning
-        exec /bin/busybox sh
+        failsafe_menu
     fi
 else
     display_status "FAIL" "Storage check failed. Cannot proceed."
     blink_fail &
-    exec /bin/busybox sh
+    failsafe_menu
 fi

@@ -225,8 +225,9 @@ jobs:
           git checkout -f -B main origin/main
 
           cp "$RUNNER_TEMP/os_list.json" os_list.json
-          git add os_list.json
+          echo "${TAG}" > VERSION
+          git add os_list.json VERSION
           git diff --cached --quiet && echo "No changes to commit" && exit 0
 
-          git commit -m "chore: stamp os_list.json for ${TAG} [skip ci]"
+          git commit -m "chore: stamp os_list.json and VERSION for ${TAG} [skip ci]"
           git push origin main

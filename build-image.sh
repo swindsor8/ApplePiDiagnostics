@@ -224,6 +224,11 @@ rsync -a --exclude='.git' \
          "${SCRIPT_DIR}/" \
          "${MOUNT_ROOT}/opt/apple-pi-diagnostics/"
 
+# Stamp release version into the image so the GUI and reports show it
+if [ -n "${VERSION}" ]; then
+    echo "${VERSION}" > "${MOUNT_ROOT}/opt/apple-pi-diagnostics/VERSION"
+fi
+
 # Make scripts executable
 chmod +x "${MOUNT_ROOT}/opt/apple-pi-diagnostics/deploy/setup-image.sh"
 chmod +x "${MOUNT_ROOT}/opt/apple-pi-diagnostics/build_failsafe.sh"

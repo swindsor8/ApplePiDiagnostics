@@ -34,8 +34,31 @@ apt-get install -y --no-install-recommends \
     lm-sensors \
     usbutils \
     lshw \
+    udisks2 \
+    i2c-tools \
+    smartmontools \
+    alsa-utils \
     fonts-dejavu-core \
     fonts-liberation
+
+# Install optional kiosk/hardware packages (best-effort across Pi OS revisions)
+apt-get install -y --no-install-recommends polkitd network-manager || true
+
+# Allow pi user in kiosk mode to mount removable USB drives, manage Wi-Fi,
+# and reboot/shut down cleanly without interactive polkit password prompts.
+mkdir -p /etc/polkit-1/rules.d
+cat > /etc/polkit-1/rules.d/50-apple-pi-diagnostics.rules <<'EOF'
+polkit.addRule(function(action, subject) {
+    if (subject.user === "pi") {
+        if (action.id.indexOf("org.freedesktop.udisks2.filesystem-mount") === 0 ||
+            action.id.indexOf("org.freedesktop.login1.reboot") === 0 ||
+            action.id.indexOf("org.freedesktop.login1.power-off") === 0 ||
+            action.id.indexOf("org.freedesktop.NetworkManager.") === 0) {
+            return polkit.Result.YES;
+        }
+    }
+});
+EOF
 
 # Install vcgencmd (raspi-utils on Bookworm; fall back to libraspberrypi-bin)
 apt-get install -y --no-install-recommends raspi-utils \
@@ -164,7 +187,11 @@ from diagnostics.network.network_test import run_network_quick_test
 from diagnostics.usb.usb_test import run_usb_quick_test
 from diagnostics.hdmi.hdmi_test import run_hdmi_quick_test
 from diagnostics.gpio.gpio_test import run_gpio_quick_test
-print("All Python and diagnostic module imports OK.")
+from diagnostics.power.power_test import run_power_quick_test
+from diagnostics.bootloader.bootloader_test import run_bootloader_quick_test
+from diagnostics.peripherals.peripherals_test import run_peripherals_quick_test
+from gui.tools_dialogs import HdmiPatternDialog, GpioPinoutDialog, WifiConnectDialog, QrPreviewDialog
+print(f"All Python and diagnostic module imports OK (version={config.APP_VERSION}).")
 PYEOF
 
 echo "==> [setup-image] Cleaning up package cache..."

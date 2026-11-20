@@ -7,12 +7,72 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import time
 import tempfile
 import subprocess
 from pathlib import Path
 from typing import Callable, Dict, Any, Optional, List
 import psutil
+
+
+def _read_sd_card_metadata(device_path: str) -> Dict[str, str]:
+    """Read SD card CID metadata (name, manufacturer, date) from sysfs if present."""
+    dev_name = os.path.basename(device_path)
+    meta_dir = Path(f"/sys/block/{dev_name}/device")
+    if not meta_dir.is_dir():
+        return {}
+    meta: Dict[str, str] = {}
+    for field in ("name", "manfid", "oemid", "date"):
+        f = meta_dir / field
+        if f.is_file():
+            try:
+                val = f.read_text(encoding="utf-8", errors="ignore").strip()
+                if val:
+                    meta[field] = val
+            except OSError:
+                pass
+    return meta
+
+
+def _check_mmc_dmesg_errors() -> List[str]:
+    """Scan kernel ring buffer for SD/MMC I/O, CRC, or read-only remount errors."""
+    if not shutil.which("dmesg"):
+        return []
+    try:
+        out = subprocess.check_output(
+            ["dmesg"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except Exception:
+        return []
+    error_patterns = re.compile(
+        r"(mmc\d+.*(error|crc|timeout|failed)|remounting filesystem read-only|i/o error.*mmcblk)",
+        re.IGNORECASE,
+    )
+    matches = [ln.strip() for ln in out.splitlines() if error_patterns.search(ln)]
+    return matches[-5:]
+
+
+def _check_smart_health(device_path: str) -> Optional[str]:
+    """Query SMART overall health via smartctl when available."""
+    if not shutil.which("smartctl") or "mmcblk" in device_path:
+        return None
+    try:
+        proc = subprocess.run(
+            ["smartctl", "-H", device_path],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        for ln in (proc.stdout or "").splitlines():
+            if "overall-health" in ln.lower() or "smart health status" in ln.lower():
+                return ln.strip()
+    except Exception:
+        pass
+    return None
 
 
 def _safe_err(e: Exception) -> str:
@@ -273,6 +333,10 @@ def run_storage_test(file_size_mb: int = 8, progress_callback: Optional[Callable
                 "tested_devices": 0,
             }
         
+        # Inspect kernel logs for SD/MMC I/O errors
+        mmc_errors = _check_mmc_dmesg_errors()
+        results["mmc_dmesg_errors"] = mmc_errors
+
         # Test each device
         for device_info in devices:
             device_path = device_info["device"]
@@ -286,6 +350,14 @@ def run_storage_test(file_size_mb: int = 8, progress_callback: Optional[Callable
                 "mountpoint": mountpoint,
                 "fstype": device_info.get("fstype"),
             }
+            if "mmcblk" in device_path:
+                sd_meta = _read_sd_card_metadata(device_path)
+                if sd_meta:
+                    device_result["sd_metadata"] = sd_meta
+            else:
+                smart = _check_smart_health(device_path)
+                if smart:
+                    device_result["smart_health"] = smart
             
             # Test the device
             if progress_callback:
@@ -301,8 +373,10 @@ def run_storage_test(file_size_mb: int = 8, progress_callback: Optional[Callable
         # Determine overall status
         if results["tested_devices"] == 0:
             results["status"] = "FAIL"
-        elif results["tested_devices"] < results["total_devices"]:
+        elif results["tested_devices"] < results["total_devices"] or mmc_errors:
             results["status"] = "WARNING"
+            if mmc_errors:
+                results["note"] = f"Detected {len(mmc_errors)} SD/MMC kernel I/O warning(s) in dmesg"
         
         return results
         

@@ -12,7 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from copy import deepcopy
 from PyQt5 import QtWidgets, QtCore, QtGui
-from config import GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT, NETWORK_DNS_CHECK_HOST
+from config import APP_VERSION, GATEWAY_PROBE_HOST, GATEWAY_PROBE_PORT, NETWORK_DNS_CHECK_HOST
 from exports.export_usb import save_report_to_usb
 from exports.export_sd_boot import save_report_to_sdboot
 from exports.export_qr import QRExportManager, generate_qr_image
@@ -24,6 +24,15 @@ from diagnostics.storage.storage_test import run_storage_quick_test
 from diagnostics.usb.usb_test import run_usb_quick_test
 from diagnostics.hdmi.hdmi_test import run_hdmi_quick_test
 from diagnostics.gpio.gpio_test import run_gpio_quick_test
+from diagnostics.power.power_test import run_power_quick_test
+from diagnostics.bootloader.bootloader_test import run_bootloader_quick_test
+from diagnostics.peripherals.peripherals_test import run_peripherals_quick_test
+from gui.tools_dialogs import (
+    GpioPinoutDialog,
+    HdmiPatternDialog,
+    QrPreviewDialog,
+    WifiConnectDialog,
+)
 
 # Try to reuse the splash module's logo discovery so the app icon matches the splash
 try:
@@ -156,6 +165,24 @@ _SVG_ICONS = {
     "folder": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </svg>""",
+
+    "power": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </svg>""",
+
+    "bootloader": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg>""",
+
+    "peripherals": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="7" width="20" height="10" rx="2"/>
+        <circle cx="7" cy="12" r="1.5"/>
+        <circle cx="12" cy="12" r="1.5"/>
+        <circle cx="17" cy="12" r="1.5"/>
     </svg>""",
 }
 
@@ -402,6 +429,9 @@ class StatusCard(QtWidgets.QWidget):
         elif status == "FAIL" or status == "ERROR":
             color = "#ef4444"  # Red
             text = "✗ Failed"
+        elif status == "WARNING":
+            color = "#f59e0b"  # Amber
+            text = "⚠ Warning"
         elif status == "UNSUPPORTED":
             color = "#f59e0b"  # Orange
             text = "— Unsupported"
@@ -447,14 +477,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sys_info_card = None
         self.sys_info_labels = []
         self.startup_banner = None
-        self.setWindowTitle("Apple Pi Diagnostics")
+        self.setWindowTitle(f"Apple Pi Diagnostics ({APP_VERSION})")
         self.setMinimumSize(1000, 700)
         self._build_ui()
         if LOGO_PATH and Path(LOGO_PATH).exists():
             self.setWindowIcon(QtGui.QIcon(str(LOGO_PATH)))
         
-        # Load system info
+        # Load system info and start live telemetry refresh
         self._update_system_info()
+        self._telemetry_timer = QtCore.QTimer(self)
+        self._telemetry_timer.timeout.connect(self._update_live_telemetry)
+        self._update_live_telemetry()
+        self._telemetry_timer.start(2000)
 
     def _build_ui(self):
         # Central widget with main layout
@@ -518,7 +552,7 @@ class MainWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QHBoxLayout(header)
         layout.setContentsMargins(20, 0, 20, 0)
         
-        # Logo/Title
+        # Logo/Title + Version badge
         title_label = QtWidgets.QLabel("Apple Pi Diagnostics")
         title_label.setStyleSheet("""
             font-size: 20px;
@@ -526,6 +560,20 @@ class MainWindow(QtWidgets.QMainWindow):
             color: #1a1a1a;
         """)
         layout.addWidget(title_label)
+
+        version_badge = QtWidgets.QLabel(APP_VERSION)
+        version_badge.setObjectName("version_badge")
+        version_badge.setStyleSheet("""
+            font-size: 11px;
+            font-weight: 600;
+            color: #0078d4;
+            background-color: #e8f3fc;
+            border: 1px solid #b6daf7;
+            border-radius: 10px;
+            padding: 2px 8px;
+            margin-left: 8px;
+        """)
+        layout.addWidget(version_badge)
         
         layout.addStretch()
         
@@ -536,16 +584,46 @@ class MainWindow(QtWidgets.QMainWindow):
                 color: white;
                 border: none;
                 border-radius: 6px;
-                padding: 8px 20px;
+                padding: 8px 16px;
                 font-size: 13px;
                 font-weight: 500;
-                margin-left: 8px;
+                margin-left: 6px;
             }
             QPushButton:hover {
                 background-color: #106ebe;
             }
             QPushButton:pressed {
                 background-color: #005a9e;
+            }
+        """
+        subtle_btn_style = """
+            QPushButton {
+                background-color: #f3f4f6;
+                color: #1f2937;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 12px;
+                font-weight: 500;
+                margin-left: 6px;
+            }
+            QPushButton:hover {
+                background-color: #e5e7eb;
+            }
+        """
+        danger_btn_style = """
+            QPushButton {
+                background-color: #fee2e2;
+                color: #991b1b;
+                border: 1px solid #fca5a5;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 12px;
+                font-weight: 600;
+                margin-left: 6px;
+            }
+            QPushButton:hover {
+                background-color: #fecaca;
             }
         """
         
@@ -558,6 +636,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self.export_btn.setStyleSheet(btn_style)
         self.export_btn.clicked.connect(self.generate_and_preview_pdf)
         layout.addWidget(self.export_btn)
+
+        self.qr_btn = QtWidgets.QPushButton("QR Share")
+        self.qr_btn.setStyleSheet(subtle_btn_style)
+        self.qr_btn.clicked.connect(self.export_qr)
+        layout.addWidget(self.qr_btn)
+
+        self.reboot_btn = QtWidgets.QPushButton("Reboot")
+        self.reboot_btn.setStyleSheet(subtle_btn_style)
+        self.reboot_btn.clicked.connect(lambda: self._confirm_system_power("reboot"))
+        layout.addWidget(self.reboot_btn)
+
+        self.shutdown_btn = QtWidgets.QPushButton("Shut Down")
+        self.shutdown_btn.setStyleSheet(danger_btn_style)
+        self.shutdown_btn.clicked.connect(lambda: self._confirm_system_power("poweroff"))
+        layout.addWidget(self.shutdown_btn)
         
         return header
 
@@ -571,6 +664,42 @@ class MainWindow(QtWidgets.QMainWindow):
         # System information card
         self.sys_info_card = self._create_system_info_card()
         layout.addWidget(self.sys_info_card)
+
+        # Live telemetry strip (CPU / RAM / Temp / Power)
+        telemetry_card = QtWidgets.QWidget()
+        telemetry_card.setObjectName("setting_card")
+        telemetry_card.setStyleSheet("""
+            QWidget#setting_card {
+                background-color: #ffffff;
+                border-radius: 12px;
+                border: 1px solid #d8d8d8;
+            }
+        """)
+        t_layout = QtWidgets.QHBoxLayout(telemetry_card)
+        t_layout.setContentsMargins(20, 12, 20, 12)
+        t_layout.setSpacing(24)
+
+        self._telemetry_labels = {}
+        for key, title in (
+            ("cpu", "CPU Load"),
+            ("ram", "Memory"),
+            ("temp", "SoC Temp"),
+            ("power", "Power / Throttle"),
+        ):
+            col = QtWidgets.QVBoxLayout()
+            col.setSpacing(2)
+            k_lbl = QtWidgets.QLabel(title)
+            k_lbl.setObjectName("sys_info_label")
+            k_lbl.setStyleSheet("font-size: 11px; color: #666666; font-weight: 600;")
+            v_lbl = QtWidgets.QLabel("—")
+            v_lbl.setObjectName("sys_info_value")
+            v_lbl.setStyleSheet("font-size: 15px; color: #111111; font-weight: 700;")
+            col.addWidget(k_lbl)
+            col.addWidget(v_lbl)
+            t_layout.addLayout(col)
+            self._telemetry_labels[key] = v_lbl
+        t_layout.addStretch()
+        layout.addWidget(telemetry_card)
 
         # Boot checks section label
         checks_label = QtWidgets.QLabel("Boot Checks")
@@ -623,26 +752,35 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         layout.addWidget(tests_label)
         
-        tests_grid = QtWidgets.QGridLayout()
+        # Scrollable test cards grid (10 hardware modules)
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; }")
+
+        grid_container = QtWidgets.QWidget()
+        grid_container.setStyleSheet("background: transparent;")
+        tests_grid = QtWidgets.QGridLayout(grid_container)
         tests_grid.setSpacing(16)
+        tests_grid.setContentsMargins(0, 0, 0, 0)
         
-        # Create test cards (reuse from overview but with test buttons)
         tests = [
             ("CPU", "cpu", "cpu"),
             ("RAM", "ram", "ram"),
             ("Storage", "sd", "sd"),
+            ("Power & Thermal", "power", "power"),
             ("Network", "network", "network"),
             ("USB", "usb", "usb"),
             ("HDMI", "hdmi", "hdmi"),
             ("GPIO", "gpio", "gpio"),
+            ("Bootloader", "bootloader", "bootloader"),
+            ("Peripherals", "peripherals", "peripherals"),
         ]
         
         row, col = 0, 0
         for title, icon, test_id in tests:
-            # Create or get card for testing page
             if test_id not in self.test_cards:
                 card = StatusCard(title, icon)
-                # Use a closure to properly capture test_id
                 def make_test_handler(tid):
                     return lambda checked: self.run_test(tid)
                 card.test_btn.clicked.connect(make_test_handler(test_id))
@@ -652,12 +790,53 @@ class MainWindow(QtWidgets.QMainWindow):
                 card.test_btn.show()
             tests_grid.addWidget(card, row, col)
             col += 1
-            if col >= 4:
+            if col >= 5:
                 col = 0
                 row += 1
-        
-        layout.addLayout(tests_grid)
-        layout.addStretch()
+
+        scroll.setWidget(grid_container)
+        layout.addWidget(scroll, stretch=1)
+
+        # Interactive Hardware Tools bar
+        tools_row = QtWidgets.QHBoxLayout()
+        tools_row.setSpacing(10)
+        tools_lbl = QtWidgets.QLabel("Interactive Tools:")
+        tools_lbl.setObjectName("sys_info_label")
+        tools_lbl.setStyleSheet("font-size: 13px; font-weight: 600; color: #333333;")
+        tools_row.addWidget(tools_lbl)
+
+        tool_btn_style = """
+            QPushButton {
+                background-color: #ffffff;
+                color: #0078d4;
+                border: 1px solid #0078d4;
+                border-radius: 6px;
+                padding: 7px 14px;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #e8f3fc;
+            }
+        """
+
+        hdmi_tool_btn = QtWidgets.QPushButton("HDMI Pattern & Audio Test")
+        hdmi_tool_btn.setStyleSheet(tool_btn_style)
+        hdmi_tool_btn.clicked.connect(self.open_hdmi_pattern)
+        tools_row.addWidget(hdmi_tool_btn)
+
+        gpio_tool_btn = QtWidgets.QPushButton("GPIO 40-Pin Viewer")
+        gpio_tool_btn.setStyleSheet(tool_btn_style)
+        gpio_tool_btn.clicked.connect(self.open_gpio_viewer)
+        tools_row.addWidget(gpio_tool_btn)
+
+        wifi_tool_btn = QtWidgets.QPushButton("Wi-Fi Setup")
+        wifi_tool_btn.setStyleSheet(tool_btn_style)
+        wifi_tool_btn.clicked.connect(self.open_wifi_dialog)
+        tools_row.addWidget(wifi_tool_btn)
+
+        tools_row.addStretch()
+        layout.addLayout(tools_row)
         
         return page
 
@@ -743,9 +922,9 @@ class MainWindow(QtWidgets.QMainWindow):
         status_label.setObjectName("setting_label")
         network_layout.addWidget(status_label)
         
-        # Refresh network info button
-        refresh_btn = QtWidgets.QPushButton("Refresh Network Info")
-        refresh_btn.setStyleSheet("""
+        # Refresh network info + Wi-Fi Setup buttons
+        net_btn_row = QtWidgets.QHBoxLayout()
+        net_btn_style = """
             QPushButton {
                 background-color: #0078d4;
                 color: white;
@@ -758,9 +937,18 @@ class MainWindow(QtWidgets.QMainWindow):
             QPushButton:hover {
                 background-color: #106ebe;
             }
-        """)
+        """
+        refresh_btn = QtWidgets.QPushButton("Refresh Network Info")
+        refresh_btn.setStyleSheet(net_btn_style)
         refresh_btn.clicked.connect(self._refresh_network_info)
-        network_layout.addWidget(refresh_btn)
+        net_btn_row.addWidget(refresh_btn)
+
+        wifi_btn = QtWidgets.QPushButton("Connect to Wi-Fi…")
+        wifi_btn.setStyleSheet(net_btn_style)
+        wifi_btn.clicked.connect(self.open_wifi_dialog)
+        net_btn_row.addWidget(wifi_btn)
+        net_btn_row.addStretch()
+        network_layout.addLayout(net_btn_row)
         
         # Network info display
         self.network_info_text = QtWidgets.QTextEdit()
@@ -784,6 +972,39 @@ class MainWindow(QtWidgets.QMainWindow):
         
         network_card.layout().addLayout(network_layout)
         layout.addWidget(network_card)
+
+        # System & Power Card (Version, report dir, kiosk power controls)
+        sys_card = self._create_setting_card(
+            "System & Power",
+            f"Apple Pi Diagnostics {APP_VERSION}  ·  Reports: {REPORT_DIR}",
+        )
+        power_row = QtWidgets.QHBoxLayout()
+        power_row.setSpacing(10)
+
+        reboot_btn = QtWidgets.QPushButton("Reboot Device")
+        reboot_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f3f4f6; color: #111827; border: 1px solid #d1d5db;
+                border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500;
+            }
+            QPushButton:hover { background-color: #e5e7eb; }
+        """)
+        reboot_btn.clicked.connect(lambda: self._confirm_system_power("reboot"))
+        power_row.addWidget(reboot_btn)
+
+        shutdown_btn = QtWidgets.QPushButton("Shut Down Device")
+        shutdown_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #ef4444; color: white; border: none;
+                border-radius: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500;
+            }
+            QPushButton:hover { background-color: #dc2626; }
+        """)
+        shutdown_btn.clicked.connect(lambda: self._confirm_system_power("poweroff"))
+        power_row.addWidget(shutdown_btn)
+        power_row.addStretch()
+        sys_card.layout().addLayout(power_row)
+        layout.addWidget(sys_card)
         
         layout.addStretch()
         
@@ -913,6 +1134,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 pass
             
             info_items = [
+                ("Version", APP_VERSION),
                 ("Hostname", hostname),
                 ("System", f"{system} {machine}"),
                 ("Processor", processor or "Unknown"),
@@ -940,6 +1162,80 @@ class MainWindow(QtWidgets.QMainWindow):
                 row += 1
         except Exception as e:
             self.statusBar().showMessage(f"Error loading system info: {e}")
+
+    def _update_live_telemetry(self):
+        """Refresh live CPU, RAM, temperature, and throttle telemetry on Overview."""
+        if not hasattr(self, "_telemetry_labels"):
+            return
+        try:
+            import psutil
+            cpu_pct = psutil.cpu_percent(interval=None)
+            mem = psutil.virtual_memory()
+            self._telemetry_labels["cpu"].setText(f"{cpu_pct:.0f}%")
+            self._telemetry_labels["ram"].setText(
+                f"{mem.used / (1024**3):.1f} / {mem.total / (1024**3):.1f} GB ({mem.percent:.0f}%)"
+            )
+
+            temp_str = "N/A"
+            tz = Path("/sys/class/thermal/thermal_zone0/temp")
+            if tz.is_file():
+                try:
+                    t_c = int(tz.read_text(encoding="utf-8").strip()) / 1000.0
+                    temp_str = f"{t_c:.1f} °C"
+                except Exception:
+                    pass
+            self._telemetry_labels["temp"].setText(temp_str)
+
+            throttle_str = "N/A"
+            t_path = Path("/sys/devices/platform/soc/soc:firmware/get_throttled")
+            if t_path.is_file():
+                try:
+                    raw = int(t_path.read_text(encoding="utf-8").strip(), 16)
+                    if raw == 0:
+                        throttle_str = "OK (0x0)"
+                    elif raw & 0xF:
+                        throttle_str = f"THROTTLED ({hex(raw)})"
+                    else:
+                        throttle_str = f"History ({hex(raw)})"
+                except Exception:
+                    pass
+            self._telemetry_labels["power"].setText(throttle_str)
+        except Exception:
+            pass
+
+    def open_hdmi_pattern(self):
+        """Launch fullscreen HDMI color bar / dead-pixel / audio test dialog."""
+        dlg = HdmiPatternDialog(self)
+        dlg.exec_()
+
+    def open_gpio_viewer(self):
+        """Open read-only 40-pin Raspberry Pi GPIO header viewer."""
+        dlg = GpioPinoutDialog(self)
+        dlg.exec_()
+
+    def open_wifi_dialog(self):
+        """Open Wi-Fi scan & connect dialog and refresh network status after."""
+        dlg = WifiConnectDialog(self)
+        dlg.exec_()
+        self._refresh_network_info()
+
+    def _confirm_system_power(self, action):
+        """Prompt for confirmation before rebooting or shutting down the Pi."""
+        import subprocess
+        label = "Reboot" if action == "reboot" else "Shut Down"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            f"Confirm {label}",
+            f"Are you sure you want to {label.lower()} this device?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            return
+        try:
+            subprocess.Popen(["systemctl", action])
+        except Exception as e:
+            QtWidgets.QMessageBox.warning(self, f"{label} Failed", str(e))
 
     def show_startup_banner(self, results):
         """Populate the Overview Boot Checks panel with pre-boot check results."""
@@ -1082,6 +1378,56 @@ class MainWindow(QtWidgets.QMainWindow):
                 elif note:
                     speed_str = f" — {note}"
                 lines.append(f"{name} ({size_str}{fs}): {dev_status}{speed_str}.")
+                sd_meta = dev.get("sd_metadata")
+                if sd_meta:
+                    lines.append("  • SD CID: " + ", ".join(f"{k}={v}" for k, v in sd_meta.items()))
+                if dev.get("smart_health"):
+                    lines.append(f"  • SMART: {dev['smart_health']}")
+            mmc_errors = result.get("mmc_dmesg_errors") or []
+            if mmc_errors:
+                lines.append(f"Kernel MMC warnings ({len(mmc_errors)}): {mmc_errors[-1]}")
+
+        elif test_id == "power":
+            if result.get("temperature_c") is not None:
+                lines.append(f"SoC temperature: {result['temperature_c']:.1f} °C.")
+            if result.get("arm_clock_mhz") is not None:
+                lines.append(f"ARM clock: {result['arm_clock_mhz']:.0f} MHz.")
+            volts = result.get("voltages") or {}
+            if volts:
+                lines.append("Rails: " + ", ".join(f"{k}={v:.3f}V" for k, v in volts.items()) + ".")
+            thr = result.get("throttled")
+            if isinstance(thr, dict):
+                lines.append(f"Throttle flags: {thr.get('raw', '0x0')}.")
+            if result.get("note"):
+                lines.append(result["note"])
+
+        elif test_id == "bootloader":
+            if result.get("model"):
+                lines.append(f"Board: {result['model']}.")
+            if result.get("revision"):
+                lines.append(f"Revision: {result['revision']}.")
+            if result.get("serial"):
+                lines.append(f"Serial: {result['serial']}.")
+            if result.get("bootloader_version"):
+                lines.append(f"Bootloader: {result['bootloader_version']}.")
+            if result.get("eeprom_status"):
+                lines.append(f"EEPROM: {result['eeprom_status']}.")
+            if result.get("note"):
+                lines.append(result["note"])
+
+        elif test_id == "peripherals":
+            for label_p, key_p in (
+                ("I2C buses", "i2c_buses"),
+                ("SPI devices", "spi_devices"),
+                ("Bluetooth", "bluetooth_adapters"),
+                ("Audio", "audio_devices"),
+                ("Cameras", "cameras"),
+            ):
+                vals = result.get(key_p) or []
+                if vals:
+                    lines.append(f"{label_p}: {', '.join(vals[:4])}.")
+            if result.get("note") and not lines:
+                lines.append(result["note"])
 
         elif test_id == "network":
             local_ip = result.get("local_ip")
@@ -1181,8 +1527,9 @@ class MainWindow(QtWidgets.QMainWindow):
         # Header: test name + pass/fail badge
         header = QtWidgets.QHBoxLayout()
         test_labels = {
-            "cpu": "CPU", "ram": "RAM", "sd": "Storage",
+            "cpu": "CPU", "ram": "RAM", "sd": "Storage", "power": "Power & Thermal",
             "network": "Network", "usb": "USB", "hdmi": "HDMI", "gpio": "GPIO",
+            "bootloader": "Bootloader & Board", "peripherals": "Peripherals",
         }
         test_name = QtWidgets.QLabel(test_labels.get(test_id, test_id.upper()))
         test_name.setStyleSheet(f"font-size: 16px; font-weight: 600; color: {text_color};")
@@ -1194,6 +1541,8 @@ class MainWindow(QtWidgets.QMainWindow):
             status_color, status_text = "#10b981", "✓ Passed"
         elif status in ("FAIL", "ERROR"):
             status_color, status_text = "#ef4444", "✗ Failed"
+        elif status == "WARNING":
+            status_color, status_text = "#f59e0b", "⚠ Warning"
         elif status == "UNSUPPORTED":
             status_color, status_text = "#f59e0b", "— Not supported"
         else:
@@ -1252,6 +1601,12 @@ class MainWindow(QtWidgets.QMainWindow):
                     result = run_hdmi_quick_test()
                 elif test_id == "gpio":
                     result = run_gpio_quick_test()
+                elif test_id == "power":
+                    result = run_power_quick_test()
+                elif test_id == "bootloader":
+                    result = run_bootloader_quick_test()
+                elif test_id == "peripherals":
+                    result = run_peripherals_quick_test()
                 else:
                     result = {"status": "UNSUPPORTED", "note": "Unknown test"}
                 
@@ -1420,6 +1775,28 @@ class MainWindow(QtWidgets.QMainWindow):
         """)
         save_usb_btn.clicked.connect(lambda: self._save_pdf_to_usb(pdf_path, dialog))
         button_layout.addWidget(save_usb_btn)
+
+        save_sd_btn = QtWidgets.QPushButton("Save to SD Boot")
+        save_sd_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #0078d4; color: white; border: none;
+                border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500;
+            }
+            QPushButton:hover { background-color: #106ebe; }
+        """)
+        save_sd_btn.clicked.connect(self.export_sd)
+        button_layout.addWidget(save_sd_btn)
+
+        share_qr_btn = QtWidgets.QPushButton("Share via QR")
+        share_qr_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #10b981; color: white; border: none;
+                border-radius: 6px; padding: 10px 16px; font-size: 14px; font-weight: 500;
+            }
+            QPushButton:hover { background-color: #059669; }
+        """)
+        share_qr_btn.clicked.connect(self.export_qr)
+        button_layout.addWidget(share_qr_btn)
         
         button_layout.addStretch()
         
@@ -1580,7 +1957,9 @@ class MainWindow(QtWidgets.QMainWindow):
             url = self.qr_manager.start()
             qr_path = REPORT_DIR / "qrs" / "report_qr.png"
             generate_qr_image(url, qr_path)
-            self.statusBar().showMessage(f"QR code generated: {qr_path}", 5000)
+            self.statusBar().showMessage(f"Serving reports at {url}", 5000)
+            dlg = QrPreviewDialog(url, qr_path, self)
+            dlg.exec_()
         except Exception as e:
             self.statusBar().showMessage(f"Error: {e}", 3000)
 
@@ -1714,7 +2093,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 continue
             
             # Update based on object name or text content
-            if label.objectName() in ("sys_info_title", "sys_info_label", "sys_info_value"):
+            if label.objectName() in ("sys_info_title", "sys_info_label", "sys_info_value", "version_badge"):
                 continue  # Already handled
             
             if "font-size: 20px" in current_style or "font-weight: 600" in current_style:
@@ -1814,6 +2193,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def closeEvent(self, event):
+        if hasattr(self, "_telemetry_timer") and self._telemetry_timer:
+            self._telemetry_timer.stop()
         if self.qr_manager:
             self.qr_manager.stop()
         event.accept()

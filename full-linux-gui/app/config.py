@@ -1,9 +1,58 @@
-"""Central configuration constants for Apple Pi Diagnostics.
+"""Central configuration constants and version discovery for Apple Pi Diagnostics.
 
 All hardcoded network addresses, ports, and timeouts live here so they can be
 changed in one place and are easy to find during security audits.
 """
 from __future__ import annotations
+
+import os
+from pathlib import Path
+import subprocess
+
+# ---------------------------------------------------------------------------
+# Application version
+# ---------------------------------------------------------------------------
+def get_app_version() -> str:
+    """Resolve the application version string.
+
+    Lookup order:
+      1. ``APD_VERSION`` environment variable
+      2. ``VERSION`` file in this directory or any parent up to the repo root
+      3. ``git describe --tags --always`` (dev checkout fallback)
+      4. ``"dev"``
+    """
+    env_ver = os.environ.get("APD_VERSION", "").strip()
+    if env_ver:
+        return env_ver
+
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        version_file = parent / "VERSION"
+        if version_file.is_file():
+            try:
+                text = version_file.read_text(encoding="utf-8").strip()
+                if text:
+                    return text
+            except OSError:
+                pass
+
+    try:
+        out = subprocess.check_output(
+            ["git", "describe", "--tags", "--always"],
+            cwd=str(here.parent),
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=2,
+        ).strip()
+        if out:
+            return out
+    except Exception:
+        pass
+
+    return "dev"
+
+
+APP_VERSION: str = get_app_version()
 
 # ---------------------------------------------------------------------------
 # Network — connectivity probe targets
